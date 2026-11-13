@@ -1,6 +1,6 @@
 # План перехода: Universal-AI (монолит 0.2.xx) → @u2ai/measurer (0.3.xx)
 
-> Актуальный статус: **шаги 1–10 завершены**, шаги 11–15 в работе.
+> Актуальный статус: **шаги 1–11 завершены**, шаги 12–15 в работе.
 > Рабочий дом переносимого кода: `submodules/u2ai-measurer/`.
 > Репозиторий: <https://github.com/u2re-space/u2ai-measurer> (remote настроен, пуш не делаем).
 >
@@ -142,7 +142,7 @@
 - [x] `src/stages/measure.js` — обзорный проход + второй проход по кропам, сбор листа
 
 ### step-11 — Стадия `design`
-- [ ] `src/stages/design.js` — контекст задачи, референсы, `DESIGN.md`, кэш, HTML-скелет
+- [x] `src/stages/design.js` — контекст задачи, референсы, `DESIGN.md`, кэш, HTML-скелет
 
 ### step-12 — Стадия `resolve` и артефакты
 - [ ] `src/stages/resolve.js` — `measurements.json`, `palette.json`, `tokens.css`,
