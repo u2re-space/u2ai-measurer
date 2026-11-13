@@ -11,7 +11,7 @@
  * @depends node:path, node:fs/promises, image/sharp, openai/responses, roles/index,
  *          stages/crop, agent/schemas
  * @usedBy shared/pipeline
- * @exports runMeasureStage, attachReference, attachmentBlock
+ * @exports runMeasureStage, shouldMeasure, attachReference, attachmentBlock, splitReferences
  * @ai.tags stage, measure, vision
  * @ai.hint io
  * @ai.hint legacy-0.2
@@ -84,6 +84,22 @@ export function splitReferences(references = []) {
     }
     const context = originals.filter((item) => !covered.has(path.basename(item.rel)));
     return { attached: [...subrefs, ...context], context: originals };
+}
+
+/**
+ * Whether the measurement stage runs.
+ *
+ * @param {object} config
+ * @param {{ hasReferences?: boolean }} [signals]
+ * @returns {boolean}
+ * @exports
+ * @ai.hint pure
+ */
+export function shouldMeasure(config, { hasReferences = false } = {}) {
+    const mode = config?.agent?.measure ?? 'auto';
+    if (mode === 'off') return false;
+    if (mode === 'always') return true;
+    return hasReferences;
 }
 
 /**

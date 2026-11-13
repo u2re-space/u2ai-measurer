@@ -1,6 +1,6 @@
 # План перехода: Universal-AI (монолит 0.2.xx) → @u2ai/measurer (0.3.xx)
 
-> Актуальный статус: **шаги 1–11 завершены**, шаги 12–15 в работе.
+> Актуальный статус: **шаги 1–12 завершены**, шаги 13–15 в работе.
 > Рабочий дом переносимого кода: `submodules/u2ai-measurer/`.
 > Репозиторий: <https://github.com/u2re-space/u2ai-measurer> (remote настроен, пуш не делаем).
 >
@@ -145,10 +145,10 @@
 - [x] `src/stages/design.js` — контекст задачи, референсы, `DESIGN.md`, кэш, HTML-скелет
 
 ### step-12 — Стадия `resolve` и артефакты
-- [ ] `src/stages/resolve.js` — `measurements.json`, `palette.json`, `tokens.css`,
+- [x] `src/stages/resolve.js` — `measurements.json`, `palette.json`, `tokens.css`,
       `DESIGN.md`, markdown-отчёт
-- [ ] `src/shared/pipeline.js` — оркестратор стадий
-- [ ] `src/stages/index.js` — реестр стадий и их подписи
+- [x] `src/shared/pipeline.js` — оркестратор стадий
+- [x] `src/stages/index.js` — реестр стадий и их подписи
 
 ### step-13 — CLI
 - [ ] `src/cli/colors.js`, `src/cli/compatibility.js` — цвета и проверка версии Node
