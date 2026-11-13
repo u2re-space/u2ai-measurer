@@ -182,8 +182,8 @@ export async function runPipeline({
                 return { id: stage.id, label: stage.label, model: role?.model ?? null };
             }),
             outputs: [
-                path.join(outputDir, MEASUREMENTS_FILE),
-                path.join('.tmp', id, 'crops'),
+                toPosix(path.join(outputDir, MEASUREMENTS_FILE)),
+                toPosix(path.join('.tmp', id, 'crops')),
             ],
         });
         return { output: null, warnings, failed: false, workId: id, artifacts: [] };
