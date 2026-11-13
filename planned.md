@@ -105,14 +105,14 @@
 - [x] `src/model/profiles.js` — профили моделей, усилие reasoning, лимиты контекста
 
 ### step-4 — Локальный растровый слой
-- [ ] `src/image/sharp.js` — декод, метаданные, ресайз под модель, RGBA-кадр
-- [ ] `src/image/canvas.js` — запасной декод и рендер аннотаций
-- [ ] `src/image/crop.js` — геометрия боксов, `clampRect`
-- [ ] `src/image/magick.js` — опциональный ImageMagick как ускорение/запасной путь
+- [x] `src/image/sharp.js` — декод, метаданные, ресайз под модель, RGBA-кадр
+- [x] `src/image/canvas.js` — запасной декод и рендер аннотаций
+- [x] `src/image/crop.js` — геометрия боксов, `clampRect`
+- [x] `src/image/magick.js` — опциональный ImageMagick как ускорение/запасной путь
 
 ### step-5 — Цвет и палитра
-- [ ] `src/image/quantizer.js` — k-means палитра, `toHex`
-- [ ] `src/image/colors.js` — sRGB→OKLCH/HSL, WCAG-контраст, `sampleColors`, `paletteOf`
+- [x] `src/image/quantizer.js` — k-means палитра, `toHex`
+- [x] `src/image/colors.js` — sRGB→OKLCH/HSL, WCAG-контраст, `sampleColors`, `paletteOf`
 
 ### step-6 — Агентный слой: инструменты
 - [ ] `src/agent/paths.js` — пути внутри рабочего каталога, запрет секретов
