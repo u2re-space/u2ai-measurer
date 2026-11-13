@@ -1,12 +1,12 @@
 # План перехода: Universal-AI (монолит 0.2.xx) → @u2ai/measurer (0.3.xx)
 
-> Актуальный статус: **шаги 1–15 в работе**.
+> Актуальный статус: **шаги 1–2 завершены**, шаги 3–15 в работе.
 > Рабочий дом переносимого кода: `submodules/u2ai-measurer/`.
 > Репозиторий: <https://github.com/u2re-space/u2ai-measurer> (remote настроен, пуш не делаем).
 >
 > Наследник предыдущего шага: `submodules/u2ai-decomposer/` (`@u2ai/decomposer`, CLI
-> `ai-decompose`) — из него берутся каркас CLI, конфиг-система, openai-слой и агентный
-> слой (tools/skills/MCP), чтобы три пакета не расходились по стилю.
+> `ai-decompose`) — из него берутся конфиг-система, openai-слой и агентный слой
+> (tools/skills/MCP), чтобы три пакета не расходились по стилю.
 > Второй родственник: `submodules/u2ai-images/` (`@u2ai/images`, CLI `ai-image`) — из него
 > берётся слой `sharp`/`canvas` и мост вызова внешнего CLI.
 
@@ -37,12 +37,12 @@
 |---|---|
 | Роль `measurer`: промпт листа измерений, строгий JSON-лист, два прохода (обзорный + по кропам) | Генератор изображений — его нет в пакете, только вызов внешнего `ai-image` |
 | Роль `designer`: визуальное направление, палитра, типографика, шкала отступов, HTML-скелет | Декомпозитор как внутренняя подсистема — только вызов внешнего `ai-decompose` |
-| Локальные операции: обрезка, разбиение на плитки, сэмплирование цвета, палитра | Team/loop агента монолита, MCP-транспорт в монолите, jobs, channels, serve |
+| Локальные операции: обрезка, разбиение на плитки, сэмплирование цвета, палитра | Team/loop агента монолита, jobs, channels, serve |
 | `sample_colors`: чтение пикселей, sRGB/HSL/OKLCH, WCAG-контраст, палитра по региону | Модельные профили картинок (`seedream`, `gpt-image`) — остаются в `@u2ai/images` |
-| Схема листа измерений (`MEASURER_SCHEMA`) и схема дизайн-направления (`DESIGNER_SCHEMA`) | Схемы планировщика, архитектора, стилиза, ревьюера — не наша зона |
-| Ветки `measure-source` (`auto`/`subrefs`/`original`), `--measure off\|auto\|always` | Команды монолита, кроме `--measure`/`--design` (они станут мостами) |
+| Схема листа измерений (`MEASUREMENT_SCHEMA`) и схема дизайн-направления (`DESIGN_SCHEMA`) | Схемы планировщика, архитектора, стилиза, ревьюера — не наша зона |
+| Ветки `measure-source` (`auto`/`subrefs`/`original`), режимы `off\|auto\|always` | Команды монолита, кроме `--measure`/`--design` (они станут мостами) |
 | Поддержка `DESIGN.md` (чтение, извлечение токенов, конфликты) | Пайплайн монолитного `ai` целиком |
-| Скиллы (`~/.ai-measure/skills/*.md`), MCP-серверы из конфига | Скиллы монолита (`skills-lock.json`) |
+| Скиллы (`~/.ai-measure/skills/*.md`) и документация стандартов (CSS units и прочие) | Скиллы монолита (`skills-lock.json`) |
 
 **Карта источников монолита:**
 
@@ -54,8 +54,9 @@
 | `src/shared/image-colors.js` | `src/image/colors.js` | sRGB→OKLCH, HSL, WCAG-контраст, `sampleColors` |
 | `src/shared/kmeans.js` | `src/image/quantizer.js` | k-means палитра, `toHex` |
 | `src/agent/measure-crops.js` | `src/stages/crop.js`, `src/stages/measure.js` | нарезка кропов по боксам листа, `measure-source` |
-| `src/agent/team.js` (ветка design) | `src/stages/design.js` | сбор контекста дизайна, чтение `DESIGN.md`, кэш |
-| `src/core/config-defaults.js` (`agent.measurer*`, `roles.measurer`, `roles.designer`) | `src/config/defaults.js` | ключи конфига и их значения |
+| `src/agent/team.js` (ветки design/measure) | `src/stages/design.js`, `src/stages/measure.js` | сбор контекста, чтение `DESIGN.md`, кэш, `measurements.json` |
+| `src/agent/team-text.js` (`renderMeasurements`, `renderDesign`) | `src/stages/resolve.js` | отчёты и сводки |
+| `src/core/config-defaults.js` (`agent.measure*`, `roles.measurer`, `roles.designer`, `documentation.roles`) | `src/config/defaults.js` | ключи конфига и их значения |
 | `src/cli-help.js` (`--measure`, `--design`) | `src/help.js` | тексты справки (на английском) |
 | `src/commands/image.js` | `src/agent/tools.js` (мостик `ai-image`) | порядок поиска бинаря, проброс кода возврата |
 
@@ -63,13 +64,13 @@
 
 | Команда | Что делает |
 |---|---|
-| `ai-measure measure <ref…>` | полный замер референса: кропы → лист измерений → `measurements.json` + `DESIGN.md`-фрагменты |
+| `ai-measure measure <ref…>` | полный замер референса: кропы → лист измерений → `measurements.json`, `DESIGN.md`, токены |
 | `ai-measure design "<task>"` | визуальное направление по референсам и/или тексту задачи |
 | `ai-measure palette <image>` | локальная палитра из пикселей (без сети) |
 | `ai-measure crop <image> --box x,y,w,h` | локальная обрезка (без сети) |
 | `ai-measure split <image> --rows N --cols N` | локальное разбиение на плитки (без сети) |
 | `ai-measure tokens <sheet.json>` | CSS-юниты и токены из готового листа измерений |
-| `ai-measure docs` | документация формата листа и `DESIGN.md` |
+| `ai-measure docs` | документация формата листа, CSS units и стандартов |
 | `ai-measure config [show\|path]` | показать/проверить конфиг |
 | `ai-measure skills` | список скилл-паков |
 
@@ -78,81 +79,82 @@
 ## 1. Шаги
 
 ### step-1 — Каркас пакета и лаунчеры
-- [ ] `package.json` (`@u2ai/measurer`, бинарь `ai-measure`, Node >= 26, ESM, зависимости)
-- [ ] `bin/ai-measure.{js,cmd,ps1,sh}`
-- [ ] `index.js` — публичный точечный вход
-- [ ] `scripts/check-syntax.mjs` — разбор всех файлов пакета
-- [ ] `.gitignore` (без `package-lock.json`)
-- [ ] Каркас каталогов `src/{cli,help,index}.js`, `src/agent`, `src/cli`, `src/config`,
+- [x] `package.json` (`@u2ai/measurer`, бинарь `ai-measure`, Node >= 26, ESM, зависимости)
+- [x] `bin/ai-measure.{js,cmd,ps1,sh}`
+- [x] `index.js` — публичный точечный вход
+- [x] `scripts/check-syntax.mjs` — разбор всех файлов пакета
+- [x] `.gitignore` (без `package-lock.json`)
+- [x] Каркас каталогов `src/{cli,help,index}.js`, `src/agent`, `src/cli`, `src/config`,
       `src/image`, `src/model`, `src/openai`, `src/roles`, `src/shared`, `src/stages`
 
 ### step-2 — Система конфигурации `~/.ai-measure`
-- [ ] `src/config/constants.js` — enum'ы (стадии, режимы замера, движки растра, уровни контекста)
-- [ ] `src/config/defaults.js` — дефолты: API, лимиты, инструменты, стадии, роли, вывод
-- [ ] `src/config/env.js` — `AI_MEASURE_*` → поля конфига
-- [ ] `src/config/paths.js` — `~/.ai-measure`, `config.json`, `skills/`
-- [ ] `src/config/merge.js`, `src/config/parser.js` — merge, JSON, `{{env:}}`/`{{file:}}`
-- [ ] `src/config/validate.js` — проверки с русскими сообщениями
-- [ ] `src/config/index.js`, `src/config.js` — загрузка, `ensureConfigFile`, `redactConfig`
+- [x] `src/config/constants.js` — enum'ы (стадии, режимы замера, движки растра, уровни контекста)
+- [x] `src/config/defaults.js` — дефолты: API, лимиты, инструменты, стадии, роли, вывод
+- [x] `src/config/env.js` — `AI_MEASURE_*` → поля конфига
+- [x] `src/config/paths.js` — `~/.ai-measure`, `config.json`, `skills/`
+- [x] `src/config/merge.js`, `src/config/parser.js` — merge, JSON, `{{env:}}`/`{{file:}}`
+- [x] `src/config/validate.js` — проверки с русскими сообщениями
+- [x] `src/config/index.js`, `src/config.js` — загрузка, `ensureConfigFile`, `redactConfig`
 
-### step-3 — CLI-каркас
-- [ ] `src/cli/colors.js`, `src/cli/compatibility.js` — цвета и проверка версии Node
-- [ ] `src/cli/renderer.js` — рендер событий (план, стадии, файлы, предупреждения)
-- [ ] `src/cli.js` — разбор argv, диспетчер команд, коды возврата
-- [ ] `src/help.js` — справка на английском языке
+### step-3 — OpenAI-слой
+- [x] `src/openai/{errors,http,sse,stream}.js` — транспорт, SSE, редуктор потока
+- [x] `src/openai/responses.js` — тело Responses-запроса, `imagePart` (vision), строгий JSON
+- [x] `src/openai/chat.js` — запасной транспорт Chat Completions
+- [x] `src/openai/{completions,fallback}.js` — алиасы и цепочка моделей
+- [x] `src/openai/client.js` — клиент: ротация бэкендов, ретраи, `responses.create`
+- [x] `src/model/profiles.js` — профили моделей, усилие reasoning, лимиты контекста
 
-### step-4 — OpenAI-слой
-- [ ] `src/openai/{errors,http,sse,stream}.js` — транспорт, SSE, редуктор потока
-- [ ] `src/openai/responses.js` — тело Responses-запроса, `imagePart` (vision), строгий JSON
-- [ ] `src/openai/chat.js` — запасной транспорт Chat Completions
-- [ ] `src/openai/{completions,fallback}.js` — алиасы и цепочка моделей
-- [ ] `src/openai/client.js` — клиент: ротация бэкендов, ретраи, `responses.create`
-- [ ] `src/model/profiles.js` — профили моделей, усилие reasoning, лимиты контекста
-
-### step-5 — Локальный растровый слой
+### step-4 — Локальный растровый слой
 - [ ] `src/image/sharp.js` — декод, метаданные, ресайз под модель, RGBA-кадр
 - [ ] `src/image/canvas.js` — запасной декод и рендер аннотаций
 - [ ] `src/image/crop.js` — геометрия боксов, `clampRect`
 - [ ] `src/image/magick.js` — опциональный ImageMagick как ускорение/запасной путь
 
-### step-6 — Цвет и палитра
+### step-5 — Цвет и палитра
 - [ ] `src/image/quantizer.js` — k-means палитра, `toHex`
 - [ ] `src/image/colors.js` — sRGB→OKLCH/HSL, WCAG-контраст, `sampleColors`, `paletteOf`
 
-### step-7 — Агентный слой: инструменты
+### step-6 — Агентный слой: инструменты
 - [ ] `src/agent/paths.js` — пути внутри рабочего каталога, запрет секретов
 - [ ] `src/agent/tool-specs.js` — каталог инструментов и их схемы
 - [ ] `src/agent/tools.js` — исполнитель: `view_image`, `crop_image`, `split_image`,
       `sample_colors`, `list_files`, `read_file`, `write_file`, `search_files`,
       `call_ai_image`, `call_ai_decompose`
 
-### step-8 — Скиллы и MCP
+### step-7 — Скиллы, документация и MCP
 - [ ] `src/agent/skills.js` — чтение скилл-паков из `~/.ai-measure/skills` и `skills.dir`
+- [ ] `src/agent/documentation.js` — тексты стандартов (CSS units, CSS shapes, WCAG colors, …)
 - [ ] `src/agent/mcp.js` — подключение MCP-серверов из конфига, доступ к их инструментам
 
-### step-9 — Схемы ответов ролей
+### step-8 — Схемы ответов ролей
 - [ ] `src/agent/schemas.js` — `MEASUREMENT_SCHEMA`, `DESIGN_SCHEMA`, `CROP_PLAN_SCHEMA`
 - [ ] Проверка схем на строгость (все поля обязательны, лишние запрещены)
 
-### step-10 — Роли
+### step-9 — Роли
 - [ ] `src/roles/untrusted.js` — общая директива о недоверенных данных
 - [ ] `src/roles/measurer.js` — промпт замера (элементы, регионы, правила, цвета, юниты)
 - [ ] `src/roles/cropper.js` — промпт плана нарезки
 - [ ] `src/roles/designer.js` — промпт визуального направления
 - [ ] `src/roles/index.js` — резолв ролей и цикл вызовов с инструментами и скиллами
 
-### step-11 — Стадии `crop` и `measure`
+### step-10 — Стадии `crop` и `measure`
 - [ ] `src/stages/crop.js` — нарезка кропов по боксам листа, режимы `auto|subrefs|original`
 - [ ] `src/stages/measure.js` — обзорный проход + второй проход по кропам, сбор листа
 
-### step-12 — Стадия `design`
+### step-11 — Стадия `design`
 - [ ] `src/stages/design.js` — контекст задачи, референсы, `DESIGN.md`, кэш, HTML-скелет
 
-### step-13 — Стадия `resolve` и артефакты
+### step-12 — Стадия `resolve` и артефакты
 - [ ] `src/stages/resolve.js` — `measurements.json`, `palette.json`, `tokens.css`,
       `DESIGN.md`, markdown-отчёт
 - [ ] `src/shared/pipeline.js` — оркестратор стадий
 - [ ] `src/stages/index.js` — реестр стадий и их подписи
+
+### step-13 — CLI
+- [ ] `src/cli/colors.js`, `src/cli/compatibility.js` — цвета и проверка версии Node
+- [ ] `src/cli/renderer.js` — рендер событий (план, стадии, файлы, предупреждения)
+- [ ] `src/cli.js` — разбор argv, диспетчер команд, коды возврата
+- [ ] `src/help.js` — справка на английском языке
 
 ### step-14 — Тесты
 - [ ] `test/config.test.js` — конфиг, валидация, русские сообщения
