@@ -1,6 +1,6 @@
 # План перехода: Universal-AI (монолит 0.2.xx) → @u2ai/measurer (0.3.xx)
 
-> Актуальный статус: **шаги 1–6 завершены**, шаги 7–15 в работе.
+> Актуальный статус: **шаги 1–7 завершены**, шаги 8–15 в работе.
 > Рабочий дом переносимого кода: `submodules/u2ai-measurer/`.
 > Репозиторий: <https://github.com/u2re-space/u2ai-measurer> (remote настроен, пуш не делаем).
 >
@@ -122,9 +122,9 @@
       `call_ai_image`, `call_ai_decompose`
 
 ### step-7 — Скиллы, документация и MCP
-- [ ] `src/agent/skills.js` — чтение скилл-паков из `~/.ai-measure/skills` и `skills.dir`
-- [ ] `src/agent/documentation.js` — тексты стандартов (CSS units, CSS shapes, WCAG colors, …)
-- [ ] `src/agent/mcp.js` — подключение MCP-серверов из конфига, доступ к их инструментам
+- [x] `src/agent/skills.js` — чтение скилл-паков из `~/.ai-measure/skills` и `skills.dir`
+- [x] `src/agent/documentation.js` — тексты стандартов (CSS units, CSS shapes, WCAG colors, …)
+- [x] `src/agent/mcp.js` — подключение MCP-серверов из конфига, доступ к их инструментам
 
 ### step-8 — Схемы ответов ролей
 - [ ] `src/agent/schemas.js` — `MEASUREMENT_SCHEMA`, `DESIGN_SCHEMA`, `CROP_PLAN_SCHEMA`
