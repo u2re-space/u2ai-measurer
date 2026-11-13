@@ -1,0 +1,53 @@
+{
+  "name": "@u2ai/measurer",
+  "version": "0.3.0-alpha",
+  "description": "AI measurer and designer: measures the geometry, the colours and the typography of a reference picture and turns the measurements into a design guide.",
+  "type": "module",
+  "main": "./index.js",
+  "bin": {
+    "ai-measure": "./bin/ai-measure.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/u2re-space/u2ai-measurer.git"
+  },
+  "engines": {
+    "node": ">=26.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "start": "node bin/ai-measure.js",
+    "test": "node --test --test-timeout=60000 \"test/*.test.js\"",
+    "test:network": "node --test --test-timeout=120000 \"test/network.test.js\"",
+    "check": "node scripts/check-syntax.mjs"
+  },
+  "files": [
+    "bin",
+    "src",
+    "index.js",
+    "README.md"
+  ],
+  "keywords": [
+    "openai",
+    "responses-api",
+    "cli",
+    "measurement",
+    "design-tokens",
+    "color-sampling",
+    "vision",
+    "ui-analysis"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/node": "^2.1.1",
+    "@resvg/resvg-js": "^2.6.2",
+    "canvas": "^4.0.0-rc3",
+    "sharp": "^0.35.5"
+  },
+  "allowScripts": {
+    "canvas@3.2.3": true,
+    "canvas@4.0.0-rc3": true
+  }
+}
