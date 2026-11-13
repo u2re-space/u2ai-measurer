@@ -1,6 +1,6 @@
 # План перехода: Universal-AI (монолит 0.2.xx) → @u2ai/measurer (0.3.xx)
 
-> Актуальный статус: **шаги 1–2 завершены**, шаги 3–15 в работе.
+> Актуальный статус: **шаги 1–6 завершены**, шаги 7–15 в работе.
 > Рабочий дом переносимого кода: `submodules/u2ai-measurer/`.
 > Репозиторий: <https://github.com/u2re-space/u2ai-measurer> (remote настроен, пуш не делаем).
 >
@@ -115,9 +115,9 @@
 - [x] `src/image/colors.js` — sRGB→OKLCH/HSL, WCAG-контраст, `sampleColors`, `paletteOf`
 
 ### step-6 — Агентный слой: инструменты
-- [ ] `src/agent/paths.js` — пути внутри рабочего каталога, запрет секретов
-- [ ] `src/agent/tool-specs.js` — каталог инструментов и их схемы
-- [ ] `src/agent/tools.js` — исполнитель: `view_image`, `crop_image`, `split_image`,
+- [x] `src/agent/paths.js` — пути внутри рабочего каталога, запрет секретов
+- [x] `src/agent/tool-specs.js` — каталог инструментов и их схемы
+- [x] `src/agent/tools.js` — исполнитель: `view_image`, `crop_image`, `split_image`,
       `sample_colors`, `list_files`, `read_file`, `write_file`, `search_files`,
       `call_ai_image`, `call_ai_decompose`
 
