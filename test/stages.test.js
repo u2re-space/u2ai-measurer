@@ -20,10 +20,10 @@ import sharp from 'sharp';
 import { runPipeline } from '../src/shared/pipeline.js';
 import { createClient } from '../src/openai/client.js';
 import { cloneDefaults } from '../src/config/defaults.js';
-import { stageMeasurementCrops, measurementConclusion } from '../src/stages/crop.js';
-import { runMeasureStage, shouldMeasure } from '../src/stages/measure.js';
+import { runMeasureStage } from '../src/stages/measure.js';
 import { runSegmentStage } from '../src/stages/segmentate.js';
 import { runCropStage } from '../src/stages/cropper.js';
+import { runRecognizeStage } from '../src/stages/recognize.js';
 import { writeStageFile } from '../src/stages/artifacts.js';
 import { splitReferences } from '../src/stages/references.js';
 import { runDesignStage, shouldRunDesign, readDesignMd, clipMiddle } from '../src/stages/design.js';
@@ -94,6 +94,52 @@ const SEGMENTATION = {
     notes: '',
 };
 
+/** The geometry of one zone, in the shape the measurer answers in. */
+const GEOMETRY = {
+    summary: 'The geometry of the zones.',
+    source: 'picture.png',
+    unit: 'px',
+    units: { source: 'px', rootFontSize: 16, scale: 1, preferred: ['rem', 'px'], notes: 'root 16px' },
+    confidence: 'high',
+    assumptions: [],
+    elements: [{
+        zone: 'badge',
+        display: 'block',
+        padding: { top: 8, right: 8, bottom: 8, left: 8 },
+        margin: { top: 0, right: 0, bottom: 0, left: 0 },
+        gap: null,
+        borders: 'a hairline border on every side, 1px',
+        radius: 4,
+        rotation: null,
+        placement: 'grid column 2',
+        css: 'padding: 0.5rem; border-radius: 0.25rem;',
+        confidence: 'high',
+        notes: '',
+    }],
+    rules: [{ name: 'space-2', value: 8, unit: 'px', css: '--space-2: 0.5rem', from: 'card padding' }],
+    notes: '',
+};
+
+/** The texts of one zone, in the shape the recognizer answers in. */
+const RECOGNITION = {
+    summary: 'One caption.',
+    texts: [{
+        zone: 'caption',
+        text: 'Award of the year',
+        role: 'caption',
+        family: 'Inter',
+        familyConfidence: 'medium',
+        fontSize: 14,
+        weight: 400,
+        lineHeight: 20,
+        letterSpacing: 0,
+        style: '',
+        confidence: 'high',
+        notes: '',
+    }],
+    notes: '',
+};
+
 /** A design direction in the shape the designer answers in. */
 const DESIGN = {
     summary: 'A quiet landing page.',
@@ -126,7 +172,10 @@ async function workspace({ designMd = null } = {}) {
 
 /**
  * A mock host that answers the Responses route.
- * @param {object|object[]} payload the answer, or the answers of the calls in order
+ *
+ * The payload may be one answer, the answers of the calls in order, or a record of the role:
+ * the key is a piece of the instructions of the role, the value is the answer of that role.
+ * @param {object|object[]|Record<string, object>} payload the answer, or the answers of the calls in order
  * @returns {Promise<{ baseURL: string, calls: object[], close: () => Promise<void> }>}
  */
 async function mockHost(payload) {
@@ -139,7 +188,16 @@ async function mockHost(payload) {
             let body = null;
             try { body = JSON.parse(Buffer.concat(chunks).toString('utf-8')); } catch { body = null; }
             calls.push({ url: req.url, method: req.method, body });
-            const answer = answers[Math.min(calls.length - 1, answers.length - 1)];
+            const instructions = String(body?.instructions ?? '');
+            let answer = answers[Math.min(calls.length - 1, answers.length - 1)];
+            if (!Array.isArray(payload) && payload && typeof payload === 'object') {
+                for (const [key, value] of Object.entries(payload)) {
+                    if (instructions.includes(key)) {
+                        answer = value;
+                        break;
+                    }
+                }
+            }
             const text = typeof answer === 'string' ? answer : JSON.stringify(answer);
             res.writeHead(200, { 'content-type': 'application/json' });
             res.end(JSON.stringify({
@@ -172,9 +230,7 @@ function configFor(baseURL) {
     config.baseURL = baseURL;
     config.apiKey = 'mock-key';
     config.backends = [{ baseURL, apiKey: 'mock-key' }];
-    config.agent.measure = 'always';
     config.agent.design = 'off';
-    config.agent.measurerPasses = 1;
     config.output.dir = './measurements';
     return config;
 }
@@ -196,150 +252,97 @@ function fakeRunner(sheet) {
 }
 
 test('the registry holds the stages of the pipeline', () => {
-    assert.deepEqual([...STAGE_IDS], ['design', 'segmentate', 'crop', 'measure', 'resolve']);
+    assert.deepEqual([...STAGE_IDS], ['design', 'segmentate', 'crop', 'measure', 'recognize', 'resolve']);
     assert.equal(stageById('measure').role, 'measurer');
     assert.equal(stageById('segmentate').role, 'segmentator');
+    assert.equal(stageById('recognize').role, 'recognizer');
     assert.equal(stageById('resolve').role, null);
     assert.equal(stageById('nothing'), null);
 });
 
-test('the crops are cut once per box and the duplicates share a file', async () => {
+test('the geometry stage measures the zones of the segmentation', async () => {
     const { root, cleanup } = await workspace();
     try {
-        const sheet = structuredClone(SHEET);
-        sheet.elements.push({ ...structuredClone(SHEET.elements[0]), name: 'Header copy' });
-        const staged = await stageMeasurementCrops({
-            root,
-            workId: 'w1',
-            sheet,
-            references: [{ kind: 'original', rel: 'picture.png' }],
-            measureSource: 'original',
+        const outDir = path.join(root, 'measurements');
+        await writeStageFile(outDir, 'segmentation', {
+            generatedBy: 'ai-measure',
+            stage: 'segmentate',
+            sources: [{
+                source: 'picture.png',
+                canvas: { x: 0, y: 0, width: 100, height: 80 },
+                scale: 1,
+                zones: SEGMENTATION.zones,
+            }],
         });
-        assert.equal(staged.crops.length, 2);
-        const files = staged.crops.map((item) => item.crop);
-        assert.equal(new Set(files).size, 2);
-        // The second element with the same box points at the file of the first one.
-        assert.equal(sheet.elements[1].crop, sheet.elements[0].crop);
-        for (const file of files) {
-            assert.ok(await stat(path.join(root, file)).then((info) => info.isFile()));
-        }
-    } finally {
-        await cleanup();
-    }
-});
-
-test('a box outside the picture is clamped to its frame', async () => {
-    const { root, cleanup } = await workspace();
-    try {
-        const sheet = structuredClone(SHEET);
-        sheet.elements[0].box = { x: 90, y: 70, width: 40, height: 40 };
-        const staged = await stageMeasurementCrops({
-            root,
-            workId: 'w1',
-            sheet,
-            references: [{ kind: 'original', rel: 'picture.png' }],
-            measureSource: 'original',
-        });
-        const box = staged.crops.find((item) => item.kind === 'element').box;
-        assert.equal(box.x, 90);
-        assert.equal(box.y, 70);
-        assert.equal(box.width, 10);
-        assert.equal(box.height, 10);
-    } finally {
-        await cleanup();
-    }
-});
-
-test('the number of crops is capped and the cap is reported', async () => {
-    const { root, cleanup } = await workspace();
-    try {
-        const sheet = structuredClone(SHEET);
-        sheet.elements = [
-            { ...structuredClone(SHEET.elements[0]), name: 'A', box: { x: 0, y: 0, width: 10, height: 10 } },
-            { ...structuredClone(SHEET.elements[0]), name: 'B', box: { x: 20, y: 0, width: 10, height: 10 } },
-            { ...structuredClone(SHEET.elements[0]), name: 'C', box: { x: 40, y: 0, width: 10, height: 10 } },
-        ];
-        const staged = await stageMeasurementCrops({
-            root,
-            workId: 'w1',
-            sheet,
-            references: [{ kind: 'original', rel: 'picture.png' }],
-            measureSource: 'original',
-            maxCrops: 2,
-        });
-        assert.equal(staged.crops.length, 2);
-        assert.ok(staged.warnings.some((item) => /limited to 2/.test(item)));
-    } finally {
-        await cleanup();
-    }
-});
-
-test('the conclusion counts the elements, the regions and the crops', () => {
-    const conclusion = measurementConclusion(SHEET, [{ kind: 'element', name: 'Header', crop: '.tmp/w1/crops/01.png', bytes: 10 }]);
-    assert.equal(conclusion.counts.elements, 1);
-    assert.equal(conclusion.counts.regions, 1);
-    assert.equal(conclusion.counts.rules, 1);
-    assert.equal(conclusion.counts.crops, 1);
-    assert.equal(conclusion.source, 'picture.png');
-});
-
-test('the measurement stage runs one pass when one is configured', async () => {
-    const { root, cleanup } = await workspace();
-    try {
-        const runner = fakeRunner(SHEET);
+        const runner = fakeRunner(GEOMETRY);
         const result = await runMeasureStage({
             root,
             workId: 'w1',
-            config: { agent: { measurerPasses: 1, measurerMaxTurns: 4 }, stages: { crop: { autoCrops: true } } },
+            config: cloneDefaults(),
             runner,
             references: [{ kind: 'original', rel: 'picture.png' }],
+            outDir,
         });
-        assert.equal(result.passes, 1);
         assert.deepEqual(runner.roles, ['measurer']);
-        assert.ok(result.sheet);
-        assert.equal(result.crops.length, 2);
+        assert.deepEqual(result.warnings, []);
+        assert.equal(result.geometry.sources.length, 1);
+        assert.equal(result.geometry.sources[0].elements.length, 1);
+        const file = path.join(outDir, 'stages', 'geometry.json');
+        assert.ok(await stat(file).then((info) => info.isFile()));
     } finally {
         await cleanup();
     }
 });
 
-test('the measurement stage runs the fragment pass over the crops', async () => {
+test('the geometry stage without a segmentation says so', async () => {
     const { root, cleanup } = await workspace();
     try {
-        const runner = fakeRunner(SHEET);
         const result = await runMeasureStage({
             root,
             workId: 'w1',
-            config: { agent: { measurerPasses: 2, measurerMaxTurns: 8 }, stages: { crop: { autoCrops: true } } },
-            runner,
+            config: cloneDefaults(),
+            runner: fakeRunner(GEOMETRY),
             references: [{ kind: 'original', rel: 'picture.png' }],
+            outDir: path.join(root, 'measurements'),
         });
-        assert.equal(result.passes, 2);
-        assert.deepEqual(runner.roles, ['measurer', 'measurerFragment']);
-        assert.ok(result.crops.length > 0);
+        assert.equal(result.geometry, null);
+        assert.match(result.warnings[0], /segmentate/i);
     } finally {
         await cleanup();
     }
 });
 
-test('the measurement stage without a reference says so', async () => {
+test('the recognition stage reads the texts of the zones', async () => {
     const { root, cleanup } = await workspace();
     try {
-        const runner = fakeRunner(SHEET);
-        const result = await runMeasureStage({ root, workId: 'w1', config: {}, runner, references: [] });
-        assert.equal(result.sheet, null);
-        assert.equal(result.passes, 0);
-        assert.match(result.warnings[0], /no reference/i);
+        const outDir = path.join(root, 'measurements');
+        await writeStageFile(outDir, 'segmentation', {
+            generatedBy: 'ai-measure',
+            stage: 'segmentate',
+            sources: [{
+                source: 'picture.png',
+                canvas: { x: 0, y: 0, width: 100, height: 80 },
+                scale: 1,
+                zones: SEGMENTATION.zones,
+            }],
+        });
+        const runner = fakeRunner(RECOGNITION);
+        const result = await runRecognizeStage({
+            root,
+            workId: 'w1',
+            config: cloneDefaults(),
+            runner,
+            references: [{ kind: 'original', rel: 'picture.png' }],
+            outDir,
+        });
+        assert.deepEqual(runner.roles, ['recognizer']);
+        assert.equal(result.recognition.sources[0].texts.length, 1);
+        assert.equal(result.recognition.sources[0].texts[0].zone, 'caption');
+        const file = path.join(outDir, 'stages', 'recognition.json');
+        assert.ok(await stat(file).then((info) => info.isFile()));
     } finally {
         await cleanup();
     }
-});
-
-test('the measurement mode decides whether the stage runs', () => {
-    assert.equal(shouldMeasure({ agent: { measure: 'off' } }, { hasReferences: true }), false);
-    assert.equal(shouldMeasure({ agent: { measure: 'always' } }, { hasReferences: false }), true);
-    assert.equal(shouldMeasure({ agent: { measure: 'auto' } }, { hasReferences: true }), true);
-    assert.equal(shouldMeasure({ agent: { measure: 'auto' } }, { hasReferences: false }), false);
 });
 
 test('the segmentation stage writes the zones of the reference', async () => {
@@ -496,7 +499,7 @@ test('the resolve stage writes the five artifacts', async () => {
             config: { output: { dir: './measurements' } },
             sheet: SHEET,
             crops: [{ kind: 'element', name: 'Header', crop: '.tmp/w1/crops/01-element-header.png', box: { x: 0, y: 0, width: 100, height: 20 } }],
-            conclusion: measurementConclusion(SHEET, []),
+            conclusion: null,
             warnings: [],
         };
         await runResolve(state, () => {});
@@ -592,7 +595,11 @@ test('the design document and the report name the source', () => {
 });
 
 test('the pipeline writes the artifacts and the crops of a real run', async () => {
-    const host = await mockHost(SHEET);
+    const host = await mockHost({
+        'You are the segmentator': SEGMENTATION,
+        'You are the measurer': GEOMETRY,
+        'You are the recognizer': RECOGNITION,
+    });
     const { root, cleanup } = await workspace();
     try {
         const config = configFor(host.baseURL);
@@ -614,16 +621,19 @@ test('the pipeline writes the artifacts and the crops of a real run', async () =
         for (const file of result.artifacts) {
             assert.ok(await stat(path.join(root, file)).then((info) => info.isFile()), `${file} is missing`);
         }
-        // The crops are cut into the work directory.
-        const crops = await stat(path.join(root, '.tmp', result.workId, 'crops')).then((info) => info.isDirectory());
+        // The fragments are cut into the output directory.
+        const crops = await stat(path.join(root, 'measurements', 'crops')).then((info) => info.isDirectory());
         assert.ok(crops);
         // The segmentation of the reference is written into the output directory.
         const segmentation = JSON.parse(await readFile(path.join(root, 'measurements', 'stages', 'segmentation.json'), 'utf-8'));
         assert.equal(segmentation.stage, 'segmentate');
         assert.equal(segmentation.sources[0].source, 'picture.png');
-        // The host was asked four times over the Responses route: the segmentation and the
-        // measurement explore with the tools, and answer in the second call under the schema.
-        assert.equal(host.calls.length, 4);
+        // The geometry and the texts are written next to it.
+        assert.ok(await stat(path.join(root, 'measurements', 'stages', 'geometry.json')).then((info) => info.isFile()));
+        assert.ok(await stat(path.join(root, 'measurements', 'stages', 'recognition.json')).then((info) => info.isFile()));
+        // The host was asked six times over the Responses route: every role explores with the
+        // tools, and answers in the second call under the schema.
+        assert.equal(host.calls.length, 6);
         assert.match(host.calls[0].url, /\/v1\/responses$/);
         assert.ok(host.calls[0].body.input_text === undefined);
         assert.ok(host.calls[0].body.text === undefined, 'the first call carries no schema');
@@ -657,7 +667,7 @@ test('the pipeline answers with the plan when it is a dry run', async () => {
         assert.equal(host.calls.length, 0);
         const plan = events.find((event) => event.type === 'plan');
         assert.ok(plan);
-        assert.deepEqual(plan.stages.map((stage) => stage.id), ['segmentate', 'crop', 'measure', 'resolve']);
+        assert.deepEqual(plan.stages.map((stage) => stage.id), ['segmentate', 'crop', 'measure', 'recognize', 'resolve']);
         assert.match(plan.outputs[0], /measurements\.json$/);
     } finally {
         await cleanup();
@@ -683,7 +693,7 @@ test('the pipeline reports the stages that are switched off', async () => {
         });
         client.close();
         const plan = events.find((event) => event.type === 'plan');
-        assert.deepEqual(plan.stages.map((stage) => stage.id), ['segmentate', 'crop', 'resolve']);
+        assert.deepEqual(plan.stages.map((stage) => stage.id), ['segmentate', 'crop', 'recognize', 'resolve']);
     } finally {
         await cleanup();
         await host.close();

@@ -92,11 +92,6 @@ export function fromEnv(env = process.env) {
   set(['raster', 'magickPath'], env.AI_MEASURE_MAGICK_PATH);
 
   // --- agent ----------------------------------------------------------------
-  if (ENUMS.measureModes.includes(env.AI_MEASURE_MEASURE)) set(['agent', 'measure'], env.AI_MEASURE_MEASURE);
-  if (ENUMS.measureSources.includes(env.AI_MEASURE_MEASURE_SOURCE)) set(['agent', 'measureSource'], env.AI_MEASURE_MEASURE_SOURCE);
-  if (ENUMS.measurePasses.includes(Number(env.AI_MEASURE_PASSES))) set(['agent', 'measurerPasses'], Number(env.AI_MEASURE_PASSES));
-  const measurerTurns = intInRange(env.AI_MEASURE_PASS_TURNS, 1, 200);
-  if (measurerTurns != null) set(['agent', 'measurerMaxTurns'], measurerTurns);
   if (ENUMS.measureModes.includes(env.AI_MEASURE_DESIGN)) set(['agent', 'design'], env.AI_MEASURE_DESIGN);
 
   // --- stages ---------------------------------------------------------------

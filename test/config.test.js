@@ -37,10 +37,8 @@ test('the defaults load when there is no config file', async () => {
     try {
         const config = await loadConfig({ env, cwd: process.cwd(), ensureHome: false });
         assert.equal(config.model, 'moonshotai/kimi-k3.1-pro');
-        assert.equal(config.agent.measure, 'auto');
-        assert.equal(config.agent.measureSource, 'auto');
-        assert.equal(config.agent.measurerPasses, 1);
         assert.equal(config.agent.design, 'off');
+        assert.equal(config.stages.measure.enabled, true);
         assert.equal(config.output.dir, './measurements');
         assert.equal(config.home, env.AI_MEASURE_HOME);
     } finally {
@@ -51,12 +49,12 @@ test('the defaults load when there is no config file', async () => {
 test('the home config file overrides the defaults', async () => {
     const { home, env, cleanup } = await tempHome();
     try {
-        await writeFile(homeConfigFile(home), JSON.stringify({ model: 'vendor/from-file', agent: { measure: 'always' } }), 'utf-8');
+        await writeFile(homeConfigFile(home), JSON.stringify({ model: 'vendor/from-file', agent: { design: 'always' } }), 'utf-8');
         const config = await loadConfig({ env, cwd: process.cwd(), ensureHome: false });
         assert.equal(config.model, 'vendor/from-file');
-        assert.equal(config.agent.measure, 'always');
+        assert.equal(config.agent.design, 'always');
         // The values the file does not mention stay on the defaults.
-        assert.equal(config.agent.measureSource, 'auto');
+        assert.equal(config.stages.measure.enabled, true);
     } finally {
         await cleanup();
     }
@@ -80,9 +78,9 @@ test('the environment overrides the file, and the file argument overrides the ho
 });
 
 test('the environment names the stages that are switched off', () => {
-    const parsed = fromEnv({ AI_MEASURE_STAGE_MEASURE: '0', AI_MEASURE_MEASURE: 'always' });
+    const parsed = fromEnv({ AI_MEASURE_STAGE_MEASURE: '0', AI_MEASURE_DESIGN: 'always' });
     assert.equal(parsed.stages.measure.enabled, false);
-    assert.equal(parsed.agent.measure, 'always');
+    assert.equal(parsed.agent.design, 'always');
 });
 
 test('an unknown stage is refused, and the message is in Russian', () => {
@@ -97,10 +95,10 @@ test('an unknown documentation source is refused', () => {
     assert.throws(() => validateConfig(config), /неизвестный источник "nonsense"/);
 });
 
-test('an invalid measure mode is refused', () => {
+test('an invalid design mode is refused', () => {
     const config = cloneDefaults();
-    config.agent.measure = 'sometimes';
-    assert.throws(() => validateConfig(config), /agent\.measure: off \| auto \| always/);
+    config.agent.design = 'sometimes';
+    assert.throws(() => validateConfig(config), /agent\.design: off \| auto \| always/);
 });
 
 test('an unknown field of the agent section is refused', () => {
@@ -122,7 +120,7 @@ test('the starter config file is valid and mentions the knobs a user edits', asy
         assert.equal(created.created, true);
         const text = await readFile(created.file, 'utf-8');
         const parsed = JSON.parse(text);
-        assert.equal(parsed.agent.measure, 'auto');
+        assert.equal(parsed.agent.design, 'off');
         assert.ok(parsed.stages.measure.enabled);
         // The starter file has to pass the validation of the merged config.
         const merged = cloneDefaults();

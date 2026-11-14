@@ -20,7 +20,7 @@ const configFor = (overrides = {}) => ({
 });
 
 test('every role has its instructions', () => {
-    for (const name of ['measurer', 'measurerFragment', 'cropper', 'designer']) {
+    for (const name of ['segmentator', 'cropper', 'measurer', 'recognizer', 'sampler', 'resolver', 'designer']) {
         assert.ok(ROLE_INSTRUCTIONS[name].length > 100, `${name} has no instructions`);
         assert.equal(resolveRoleInstructions(name), ROLE_INSTRUCTIONS[name]);
     }

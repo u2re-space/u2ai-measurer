@@ -137,18 +137,6 @@ export const defaults = {
 
   // --- agent knobs -----------------------------------------------------------
   agent: {
-    /** When the measurement stage runs: off | auto | always. */
-    measure: 'auto',
-    /** Which pictures the measurer measures: auto | subrefs | original. */
-    measureSource: 'auto',
-    /** 1 = one overview sheet; 2 = whole reference, then staged fragments. */
-    measurerPasses: 1,
-    /** Total tool turns for the measurement passes. */
-    measurerMaxTurns: 16,
-    /** Context budget of the measurer: a word level or bytes. */
-    measurerMaxContextBytes: 'large',
-    /** Cap of automatic crops per measurement sheet; 0 lifts the cap. */
-    maxCrops: 192,
     /** When the design stage runs: off | auto | always. */
     design: 'off',
     /** Tool turns the designer may spend producing the design direction. */
@@ -291,10 +279,6 @@ export function defaultConfigText() {
     reasoning: { effort: 'high', summary: 'auto' },
     backends: structuredClone(defaults.backends),
     agent: {
-      measure: defaults.agent.measure,
-      measureSource: defaults.agent.measureSource,
-      measurerPasses: defaults.agent.measurerPasses,
-      measurerMaxTurns: defaults.agent.measurerMaxTurns,
       design: defaults.agent.design,
     },
     stages: {

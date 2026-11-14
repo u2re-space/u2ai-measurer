@@ -9,7 +9,7 @@
  * @ai.hint legacy-0.2
  */
 
-import { ENUMS, HEADER_NAME, SUPPORT_ALIASES, KiB } from './constants.js';
+import { ENUMS, HEADER_NAME, SUPPORT_ALIASES } from './constants.js';
 import { defaults, ROLE_FIELDS } from './defaults.js';
 import { isRecord } from './merge.js';
 
@@ -129,15 +129,6 @@ function validateAgent(agent, fail) {
   for (const key of Object.keys(agent)) {
     if (!(key in defaults.agent)) fail(`${where}.${key}: неизвестное поле (допустимо: ${Object.keys(defaults.agent).join(', ')})`);
   }
-  if (!ENUMS.measureModes.includes(agent.measure)) fail(`${where}.measure: ${ENUMS.measureModes.join(' | ')}`);
-  if (!ENUMS.measureSources.includes(agent.measureSource)) fail(`${where}.measureSource: ${ENUMS.measureSources.join(' | ')}`);
-  if (!ENUMS.measurePasses.includes(agent.measurerPasses)) fail(`${where}.measurerPasses: ${ENUMS.measurePasses.join(' | ')}`);
-  if (!(Number.isSafeInteger(agent.measurerMaxTurns) && agent.measurerMaxTurns > 0)) fail(`${where}.measurerMaxTurns: целое > 0`);
-  if (!(Number.isSafeInteger(agent.maxCrops) && agent.maxCrops >= 0)) fail(`${where}.maxCrops: целое ≥ 0`);
-  if (!(ENUMS.contextWords.includes(agent.measurerMaxContextBytes)
-    || (Number.isSafeInteger(agent.measurerMaxContextBytes) && agent.measurerMaxContextBytes >= KiB))) {
-    fail(`${where}.measurerMaxContextBytes: ${ENUMS.contextWords.join(' | ')} или байты`);
-  }
   if (!ENUMS.measureModes.includes(agent.design)) fail(`${where}.design: ${ENUMS.measureModes.join(' | ')}`);
   if (!(Number.isSafeInteger(agent.designerMaxTurns) && agent.designerMaxTurns > 0)) fail(`${where}.designerMaxTurns: целое > 0`);
 }
@@ -248,7 +239,6 @@ export function validateConfig(config) {
     if (role.model != null && (typeof role.model !== 'string' || !role.model.trim())) fail(`roles.${name}.model: строка или null`);
     if (role.effort != null && !ENUMS.reasoningEfforts.includes(role.effort)) fail(`roles.${name}.effort: ${ENUMS.reasoningEfforts.join(' | ')}`);
     if (role.maxEffort != null && !ENUMS.reasoningEfforts.includes(role.maxEffort)) fail(`roles.${name}.maxEffort: ${ENUMS.reasoningEfforts.join(' | ')}`);
-    if (role.context != null && !(ENUMS.contextWords.includes(role.context) || (Number.isSafeInteger(role.context) && role.context > 0))) fail(`roles.${name}.context: ${ENUMS.contextWords.join(' | ')} или байты`);
     if (role.tools != null && !Array.isArray(role.tools)) fail(`roles.${name}.tools: массив имён или null`);
     if (role.instructions != null && typeof role.instructions !== 'string') fail(`roles.${name}.instructions: строка или null`);
   }

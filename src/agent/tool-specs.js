@@ -42,7 +42,7 @@ export const TOOL_SPECS = Object.freeze({
             additionalProperties: false,
         },
         required: ['path'],
-        roles: ['segmentator', 'measurer', 'measurerFragment', 'cropper', 'recognizer', 'sampler', 'designer'],
+        roles: ['segmentator', 'measurer', 'cropper', 'recognizer', 'sampler', 'designer'],
     },
     crop_image: {
         configKey: 'image_crop',
@@ -61,7 +61,7 @@ export const TOOL_SPECS = Object.freeze({
             additionalProperties: false,
         },
         required: ['path', 'x', 'y', 'width', 'height'],
-        roles: ['segmentator', 'measurer', 'measurerFragment', 'cropper', 'recognizer', 'sampler'],
+        roles: ['segmentator', 'measurer', 'cropper', 'recognizer', 'sampler'],
     },
     split_image: {
         configKey: 'image_split',
@@ -78,7 +78,7 @@ export const TOOL_SPECS = Object.freeze({
             additionalProperties: false,
         },
         required: ['path', 'rows', 'cols'],
-        roles: ['measurer', 'measurerFragment'],
+        roles: ['measurer'],
     },
     sample_colors: {
         configKey: 'image_sample',
@@ -118,7 +118,7 @@ export const TOOL_SPECS = Object.freeze({
             additionalProperties: false,
         },
         required: ['color'],
-        roles: ['measurer', 'measurerFragment', 'sampler', 'designer'],
+        roles: ['measurer', 'sampler', 'designer'],
     },
     list_files: {
         configKey: 'list',
@@ -133,7 +133,7 @@ export const TOOL_SPECS = Object.freeze({
             additionalProperties: false,
         },
         required: [],
-        roles: ['segmentator', 'measurer', 'measurerFragment', 'recognizer', 'sampler', 'resolver', 'designer'],
+        roles: ['segmentator', 'measurer', 'recognizer', 'sampler', 'resolver', 'designer'],
     },
     read_file: {
         configKey: 'read',
@@ -147,7 +147,7 @@ export const TOOL_SPECS = Object.freeze({
             additionalProperties: false,
         },
         required: ['path'],
-        roles: ['measurer', 'measurerFragment', 'recognizer', 'sampler', 'resolver', 'designer'],
+        roles: ['measurer', 'recognizer', 'sampler', 'resolver', 'designer'],
     },
     write_file: {
         configKey: 'write',
@@ -181,7 +181,7 @@ export const TOOL_SPECS = Object.freeze({
             additionalProperties: false,
         },
         required: ['query'],
-        roles: ['measurer', 'measurerFragment', 'designer'],
+        roles: ['measurer', 'designer'],
     },
     call_ai_image: {
         configKey: 'external_image',
@@ -211,7 +211,7 @@ export const TOOL_SPECS = Object.freeze({
             additionalProperties: false,
         },
         required: ['args'],
-        roles: ['measurer', 'measurerFragment'],
+        roles: ['measurer'],
     },
 });
 

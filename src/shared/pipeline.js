@@ -22,7 +22,7 @@ import { createRoleRunner } from '../roles/index.js';
 import { createToolset } from '../agent/tools.js';
 import { loadSkills } from '../agent/skills.js';
 import { connectMcpServers } from '../agent/mcp.js';
-import { STAGE_DEFS, STAGE_DIRS, STAGE_ROLES, shouldRunDesign, shouldMeasure } from '../stages/index.js';
+import { STAGE_DEFS, STAGE_DIRS, STAGE_ROLES, shouldRunDesign } from '../stages/index.js';
 import { MEASUREMENTS_FILE } from '../stages/resolve.js';
 import { isInside, toPosix } from '../agent/paths.js';
 
@@ -34,6 +34,7 @@ export const STAGES = STAGE_DEFS.map((stage) => ({
     id: stage.id,
     label: stage.label,
     run: stage.run,
+    needsReferences: stage.needsReferences === true,
 }));
 
 /**
@@ -141,10 +142,8 @@ export async function runPipeline({
         ? packs.map((pack) => `## Skill pack: ${pack.name}\n${pack.content.trim()}`).join('\n\n')
         : '');
     const measurerPacks = await loadSkills({ dir: skillDir, role: 'measurer' });
-    const fragmentPacks = await loadSkills({ dir: skillDir, role: 'measurerFragment' });
     const skills = {
         measurer: packText(measurerPacks),
-        measurerFragment: packText([...measurerPacks, ...fragmentPacks]),
     };
     // The other roles get their own packs; a role without a pack simply has none.
     for (const name of ['segmentator', 'cropper', 'recognizer', 'sampler', 'resolver', 'designer']) {
@@ -183,9 +182,8 @@ export async function runPipeline({
         if (stage.id === 'design') {
             return shouldRunDesign(config, { hasReferences: references.length > 0, hasDesignMd, task });
         }
-        if (stage.id === 'measure') {
-            return shouldMeasure(config, { hasReferences: references.length > 0 });
-        }
+        // The stages that look at a picture need one.
+        if (stage.needsReferences) return references.length > 0;
         return true;
     });
     if (stopAfter) {
@@ -228,6 +226,8 @@ export async function runPipeline({
         references,
         design: null,
         segmentation: null,
+        geometry: null,
+        recognition: null,
         sheet: null,
         crops: [],
         conclusion: null,

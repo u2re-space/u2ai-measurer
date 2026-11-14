@@ -9,8 +9,8 @@
  *   - the originals that produced a sub-reference stay out of the picture, they are paths.
  *
  * @depends node:path, image/sharp, openai/responses
- * @usedBy stages/measure, stages/segmentate, stages/recognize
- * @exports attachReference, attachmentBlock, splitReferences
+ * @usedBy stages/measure, stages/segmentate, stages/recognize, stages/cropper
+ * @exports attachReference, attachImage, attachmentBlock, splitReferences
  * @ai.tags stage, references, vision
  * @ai.hint io
  */
@@ -20,7 +20,7 @@ import { modelBytes, rasterInfo } from '../image/sharp.js';
 import { imagePart, textPart } from '../openai/responses.js';
 
 /**
- * Read a reference picture and turn it into an input part the model can see.
+ * Read a picture and turn it into an input part the model can see.
  *
  * The picture is downscaled to the configured longest edge: the model reads the layout, and a
  * 4K screenshot costs a lot of tokens for nothing.
@@ -28,14 +28,13 @@ import { imagePart, textPart } from '../openai/responses.js';
  * The size of the file is returned next to the size of the picture the model sees: the model
  * answers in the pixels of the picture it was given, and the stages that cut the file need the
  * pixels of the file.
- * @param {{ root: string, rel: string, config?: object }} options
+ * @param {{ abs: string, config?: object }} options
  * @returns {Promise<{ part: object, width: number, height: number, sourceWidth: number,
  *   sourceHeight: number, scale: number }|null>}
  * @exports
  * @ai.hint io
  */
-export async function attachReference({ root, rel, config = {} }) {
-    const abs = path.resolve(root, rel);
+export async function attachImage({ abs, config = {} }) {
     const image = await modelBytes(abs, {
         maxSide: Number.isSafeInteger(config?.image?.maxSide) ? config.image.maxSide : 1536,
         format: config?.image?.format === 'jpeg' ? 'jpeg' : 'png',
@@ -54,6 +53,19 @@ export async function attachReference({ root, rel, config = {} }) {
         // How many pixels of the file one pixel of the picture the model sees is worth.
         scale: image.width ? sourceWidth / image.width : 1,
     };
+}
+
+/**
+ * Read a reference picture and turn it into an input part the model can see.
+ *
+ * @param {{ root: string, rel: string, config?: object }} options
+ * @returns {Promise<{ part: object, width: number, height: number, sourceWidth: number,
+ *   sourceHeight: number, scale: number }|null>}
+ * @exports
+ * @ai.hint io
+ */
+export async function attachReference({ root, rel, config = {} }) {
+    return attachImage({ abs: path.resolve(root, rel), config });
 }
 
 /**

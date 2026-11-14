@@ -29,12 +29,8 @@ export const ENUMS = Object.freeze({
   stages: Object.freeze(['segmentate', 'crop', 'measure', 'recognize', 'sample', 'resolve', 'design']),
   /** How a stage may work: local (the harness does it) or ai (the model does it). */
   stageModes: Object.freeze(['local', 'ai']),
-  /** When the measurement stage runs. */
+  /** When the design stage runs. */
   measureModes: Object.freeze(['off', 'auto', 'always']),
-  /** Which pictures the measurer measures and cuts crops from. */
-  measureSources: Object.freeze(['auto', 'subrefs', 'original']),
-  /** How many passes the measurer makes over a reference. */
-  measurePasses: Object.freeze([1, 2]),
   /** How sure a measurement may be. */
   confidenceLevels: Object.freeze(['high', 'medium', 'low', 'unknown']),
   rasterEngines: Object.freeze(['auto', 'sharp', 'canvas', 'magick']),

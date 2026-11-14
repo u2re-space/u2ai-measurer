@@ -12,10 +12,10 @@
  */
 
 import { runDesignStage, shouldRunDesign } from './design.js';
-import { runMeasureStage, shouldMeasure } from './measure.js';
+import { runMeasureStage } from './measure.js';
 import { runSegmentStage } from './segmentate.js';
 import { runCropStage } from './cropper.js';
-import { measurementConclusion } from './crop.js';
+import { runRecognizeStage } from './recognize.js';
 import { runResolve, MEASUREMENTS_FILE } from './resolve.js';
 
 /**
@@ -42,7 +42,7 @@ async function designStage(state, notify) {
 }
 
 /**
- * The measurement stage: the sheet, the crops and the conclusion.
+ * The measurement stage: the geometry of the zones.
  * @param {object} state the pipeline state
  * @param {Function} notify event callback
  * @returns {Promise<void>}
@@ -54,18 +54,34 @@ async function measureStage(state, notify) {
         workId: state.workId,
         config: state.config,
         runner: state.roles,
-        toolset: state.toolset,
         references: state.references,
-        // The crop stage cuts the fragments of the segmentation; when it ran, the old sheet
-        // does not cut them a second time.
-        skipCrops: (state.crops?.length ?? 0) > 0,
+        outDir: state.outDir,
         notify,
         signal: state.signal ?? null,
     });
-    state.sheet = result.sheet;
-    // The fragments of the crop stage stay when the old sheet cut none of its own.
-    state.crops = result.crops.length ? result.crops : (state.crops ?? []);
-    state.conclusion = result.conclusion ?? measurementConclusion(result.sheet, result.crops);
+    state.geometry = result.geometry;
+    state.warnings.push(...result.warnings);
+}
+
+/**
+ * The recognition stage: the texts and the typography of the zones.
+ * @param {object} state the pipeline state
+ * @param {Function} notify event callback
+ * @returns {Promise<void>}
+ * @ai.hint io
+ */
+async function recognizeStage(state, notify) {
+    const result = await runRecognizeStage({
+        root: state.root,
+        workId: state.workId,
+        config: state.config,
+        runner: state.roles,
+        references: state.references,
+        outDir: state.outDir,
+        notify,
+        signal: state.signal ?? null,
+    });
+    state.recognition = result.recognition;
     state.warnings.push(...result.warnings);
 }
 
@@ -123,11 +139,12 @@ async function cropStage(state, notify) {
  * @type {ReadonlyArray<{ id: string, label: string, role: string|null, run: Function, dir: string }>}
  */
 export const STAGE_DEFS = Object.freeze([
-    { id: 'design', label: 'Design direction', role: 'designer', run: designStage, dir: 'design-assets' },
-    { id: 'segmentate', label: 'Segment the reference', role: 'segmentator', run: segmentateStage, dir: 'stages' },
-    { id: 'crop', label: 'Cut the fragments', role: 'cropper', run: cropStage, dir: 'crops' },
-    { id: 'measure', label: 'Measure the reference', role: 'measurer', run: measureStage, dir: 'crops' },
-    { id: 'resolve', label: 'Write the artifacts', role: null, run: runResolve, dir: MEASUREMENTS_FILE },
+    { id: 'design', label: 'Design direction', role: 'designer', run: designStage, dir: 'design-assets', needsReferences: false },
+    { id: 'segmentate', label: 'Segment the reference', role: 'segmentator', run: segmentateStage, dir: 'stages', needsReferences: true },
+    { id: 'crop', label: 'Cut the fragments', role: 'cropper', run: cropStage, dir: 'crops', needsReferences: false },
+    { id: 'measure', label: 'Measure the zones', role: 'measurer', run: measureStage, dir: 'stages', needsReferences: true },
+    { id: 'recognize', label: 'Read the texts', role: 'recognizer', run: recognizeStage, dir: 'stages', needsReferences: true },
+    { id: 'resolve', label: 'Write the artifacts', role: null, run: runResolve, dir: MEASUREMENTS_FILE, needsReferences: false },
 ]);
 
 /** The ids of the stages, in order. */
@@ -149,4 +166,4 @@ export function stageById(id) {
     return STAGE_DEFS.find((stage) => stage.id === id) ?? null;
 }
 
-export { shouldRunDesign, shouldMeasure };
+export { shouldRunDesign };

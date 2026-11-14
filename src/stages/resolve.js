@@ -25,7 +25,7 @@
  */
 
 import path from 'node:path';
-import { cp, mkdir, writeFile } from 'node:fs/promises';
+import { cp, mkdir, stat, writeFile } from 'node:fs/promises';
 import { cropSlug } from './artifacts.js';
 import { toPosix } from '../agent/paths.js';
 
@@ -61,6 +61,13 @@ export async function collectCrops(root, target, crops = [], warnings = []) {
     for (const item of crops) {
         const source = toPosix(String(item?.crop ?? ''));
         if (!source) continue;
+        // A fragment that already lies in the output directory stays where it is.
+        const placed = path.resolve(target, source);
+        if (await stat(placed).then((info) => info.isFile()).catch(() => false)) {
+            map.set(source, source);
+            copied.push(item);
+            continue;
+        }
         const from = path.resolve(root, source);
         const name = path.basename(from);
         const to = path.join(dir, name);

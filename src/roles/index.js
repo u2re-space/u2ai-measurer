@@ -21,7 +21,7 @@
  * @ai.hint keep
  * @ai.hint legacy-0.2
  */
-import { instructions as measurerInstructions, fragmentInstructions } from './measurer.js';
+import { instructions as measurerInstructions } from './measurer.js';
 import { instructions as cropperInstructions } from './cropper.js';
 import { instructions as segmentatorInstructions } from './segmentator.js';
 import { instructions as recognizerInstructions } from './recognizer.js';
@@ -41,7 +41,6 @@ export const ROLE_INSTRUCTIONS = Object.freeze({
     segmentator: segmentatorInstructions,
     cropper: cropperInstructions,
     measurer: measurerInstructions,
-    measurerFragment: fragmentInstructions,
     recognizer: recognizerInstructions,
     sampler: samplerInstructions,
     resolver: resolverInstructions,
