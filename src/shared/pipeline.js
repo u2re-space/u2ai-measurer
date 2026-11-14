@@ -143,6 +143,11 @@ export async function runPipeline({
     };
 
     const mcp = dryRun ? [] : await connectMcpServers(config?.mcp?.servers ?? []);
+    for (const connection of mcp) {
+        if (connection?.error) {
+            warnings.push(`The MCP server ${connection.name} is not connected: ${connection.error}`);
+        }
+    }
 
     // One toolset for the whole run: the stages open the directories a role may write into, and
     // the role runner executes the calls with the very same executor.

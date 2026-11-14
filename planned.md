@@ -214,6 +214,11 @@
 - [x] `src/cli.js` — команда `skills` показывает состав пака
 - [x] `test/skills.test.js`
 
+### step-22 — MCP
+- [x] `src/agent/mcp.js` — HTTP и stdio, `initialize`, `tools/list`, `tools/call` (было в
+      step-7, проверено на живом сервере)
+- [x] `src/shared/pipeline.js` — сервер, который не поднялся, попадает в предупреждения
+
 ---
 
 ## 2. Правила работы
