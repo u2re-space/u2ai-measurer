@@ -169,6 +169,13 @@
 - [x] `README.md` — установка, команды, примеры, формат конфига
 - [x] Чеклист релиза: `npm run check`, `npm test`, `npm pack --dry-run`, версия, репозиторий
 
+### step-16 — Схема как канал ответа
+- [x] `src/openai/responses.js` — `schemaChannel`: `tool` (функция), `format` (`text.format`) или
+      `auto`; при наличии других инструментов схема едет только инструментом
+- [x] `src/openai/responses.js` — `parseResponse(raw, { schemaName })` читает ответ из вызова
+      схемы; `parseJsonText` вытаскивает JSON из текста с fences и прозой
+- [x] `test/responses.test.js`
+
 ---
 
 ## 2. Правила работы

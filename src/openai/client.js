@@ -368,15 +368,16 @@ export async function createClient({ config, env = process.env, signal = null, o
      */
     async function responsesCreate({
         model = null, instructions = null, input = null, parts = null, tools = null,
-        schema = null, schemaName = 'response', strict = true, effort = null, summary = null,
-        mode = null, maxOutputTokens = null, temperature = null, store = false, truncation = null,
-        verbosity = null, stream = false, signal: callSignal = null, onEvent: callEvent = null,
-        previousResponseId = null, toolChoice = null, parallelToolCalls = null,
+        schema = null, schemaName = 'response', schemaChannel = 'auto', strict = true, effort = null,
+        summary = null, mode = null, maxOutputTokens = null, temperature = null, store = false,
+        truncation = null, verbosity = null, stream = false, signal: callSignal = null,
+        onEvent: callEvent = null, previousResponseId = null, toolChoice = null,
+        parallelToolCalls = null,
     } = {}) {
         const body = buildResponsesBody({
-            model, instructions, input, parts, tools, schema, schemaName, strict, effort, summary, mode,
-            maxOutputTokens, temperature, store, truncation, verbosity, stream, previousResponseId,
-            toolChoice, parallelToolCalls,
+            model, instructions, input, parts, tools, schema, schemaName, schemaChannel, strict,
+            effort, summary, mode, maxOutputTokens, temperature, store, truncation, verbosity, stream,
+            previousResponseId, toolChoice, parallelToolCalls,
         });
         const wantedModel = model ?? config?.model ?? null;
 
