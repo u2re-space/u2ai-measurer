@@ -331,9 +331,11 @@ export async function main(argv = process.argv.slice(2)) {
     // code is the only witness: a silent death is the hardest kind of failure to read.
     process.on('unhandledRejection', (reason) => {
         console.error(`Unhandled rejection: ${reason?.message ?? reason}`);
+        process.exitCode = EXIT.failure;
     });
     process.on('uncaughtException', (error) => {
         console.error(`Uncaught exception: ${error?.message ?? error}`);
+        process.exitCode = EXIT.failure;
     });
 
     const opts = parseArgv(argv);
