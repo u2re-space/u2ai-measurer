@@ -619,10 +619,17 @@ export async function runResolve(state, notify = () => {}) {
     const files = [
         { name: MEASUREMENTS_FILE, content: `${JSON.stringify(measurements, null, 2)}\n` },
         { name: PALETTE_FILE, content: `${JSON.stringify(paletteFile, null, 2)}\n` },
-        { name: TOKENS_FILE, content: css },
-        { name: DESIGN_MD_FILE, content: designMd },
-        { name: REPORT_FILE, content: report },
     ];
+    // The switches of the stage decide which of the optional files are written.
+    if (config?.stages?.resolve?.tokens !== false) {
+        files.push({ name: TOKENS_FILE, content: css });
+    }
+    if (config?.stages?.resolve?.designMd !== false) {
+        files.push({ name: DESIGN_MD_FILE, content: designMd });
+    }
+    if (config?.stages?.resolve?.report !== false) {
+        files.push({ name: REPORT_FILE, content: report });
+    }
 
     const written = [];
     for (const file of files) {
@@ -643,7 +650,8 @@ export async function runResolve(state, notify = () => {}) {
 
     state.palette = paletteFile;
     state.tokens = tokens;
-    state.artifacts = written;
+    // The delivery joins the files of the stages: everything the run wrote is named at the end.
+    state.artifacts = [...(state.artifacts ?? []), ...written];
     state.outputPath = path.join(target, MEASUREMENTS_FILE);
     notify({ type: 'resolve.done', files: written, tokens: tokens.length });
 }
@@ -680,6 +688,7 @@ async function askResolver({ state, sheet, segmentation, geometry, recognition, 
         schema: MEASUREMENT_SCHEMA,
         schemaName: 'measurement',
         maxTurns,
+        effort: state.config?.stages?.resolve?.effort ?? null,
         signal,
     });
 }

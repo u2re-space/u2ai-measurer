@@ -177,6 +177,7 @@ export async function runDesignStage({
         schema: DESIGN_SCHEMA,
         schemaName: 'design',
         maxTurns,
+        effort: config?.stages?.design?.effort ?? null,
         signal,
     });
 

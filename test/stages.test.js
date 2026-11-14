@@ -900,7 +900,8 @@ test('the pipeline writes the artifacts and the crops of a real run', async () =
 
         assert.equal(result.failed, false);
         assert.deepEqual(result.warnings, []);
-        assert.equal(result.artifacts.length, 5);
+        // Five files of the delivery and five files of the stages: everything the run wrote.
+        assert.equal(result.artifacts.length, 10);
         for (const file of result.artifacts) {
             assert.ok(await stat(path.join(root, file)).then((info) => info.isFile()), `${file} is missing`);
         }
@@ -979,6 +980,102 @@ test('the pipeline reports the stages that are switched off', async () => {
         client.close();
         const plan = events.find((event) => event.type === 'plan');
         assert.deepEqual(plan.stages.map((stage) => stage.id), ['segmentate', 'crop', 'recognize', 'sample', 'resolve']);
+    } finally {
+        await cleanup();
+        await host.close();
+    }
+});
+
+test('the pipeline runs only the stages that were named', async () => {
+    const host = await mockHost({
+        'You are the segmentator': SEGMENTATION,
+    });
+    const { root, cleanup } = await workspace();
+    try {
+        const config = configFor(host.baseURL);
+        const client = await createClient({ config, env: {} });
+        const events = [];
+        const result = await runPipeline({
+            root,
+            images: ['picture.png'],
+            stages: ['segmentate'],
+            config,
+            client,
+            task: 'measure this',
+            notify: (event) => events.push(event),
+        });
+        client.close();
+
+        assert.equal(result.failed, false);
+        // Only the segmentation was written: the stages after it did not run.
+        assert.deepEqual(
+            result.artifacts.map((file) => path.basename(file)),
+            ['segmentation.json'],
+        );
+        assert.ok(await stat(path.join(root, 'measurements', 'stages', 'segmentation.json')).then((info) => info.isFile()));
+        assert.equal(
+            await stat(path.join(root, 'measurements', 'stages', 'geometry.json')).then((info) => info.isFile()).catch(() => false),
+            false,
+        );
+        // The stages that ran are announced, the others are not.
+        const started = events.filter((event) => event.type === 'stage.start').map((event) => event.stage);
+        assert.deepEqual(started, ['segmentate']);
+    } finally {
+        await cleanup();
+        await host.close();
+    }
+});
+
+test('the design stage runs when it is named, even when the gate is off', async () => {
+    const host = await mockHost(SHEET);
+    const { root, cleanup } = await workspace();
+    try {
+        const config = configFor(host.baseURL);
+        config.agent.design = 'off';
+        const client = await createClient({ config, env: {} });
+        const events = [];
+        await runPipeline({
+            root,
+            images: ['picture.png'],
+            stages: ['design'],
+            config,
+            client,
+            dryRun: true,
+            notify: (event) => events.push(event),
+        });
+        client.close();
+        const plan = events.find((event) => event.type === 'plan');
+        assert.deepEqual(plan.stages.map((stage) => stage.id), ['design']);
+    } finally {
+        await cleanup();
+        await host.close();
+    }
+});
+
+test('the effort of the run is the ceiling of the stages', async () => {
+    const host = await mockHost({
+        'You are the segmentator': SEGMENTATION,
+        'You are the measurer': GEOMETRY,
+    });
+    const { root, cleanup } = await workspace();
+    try {
+        const config = configFor(host.baseURL);
+        const client = await createClient({ config, env: {} });
+        await runPipeline({
+            root,
+            images: ['picture.png'],
+            stages: ['segmentate', 'measure'],
+            config,
+            client,
+            // The run promises less than the stages ask for.
+            effort: 'low',
+            notify: () => {},
+        });
+        client.close();
+        assert.ok(host.calls.length >= 2);
+        for (const call of host.calls) {
+            assert.equal(call.body.reasoning?.effort, 'low', 'the stage went over the ceiling of the run');
+        }
     } finally {
         await cleanup();
         await host.close();

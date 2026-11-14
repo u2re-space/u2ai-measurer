@@ -172,6 +172,24 @@ test('the measure command without a picture is a usage error', async () => {
     assert.match(err, /needs at least one picture/);
 });
 
+test('a stage that looks at a picture needs one', async () => {
+    const { code, err } = await run(['measure', '--stages', 'measure']);
+    assert.equal(code, EXIT.usage);
+    assert.match(err, /needs at least one picture/);
+});
+
+test('the resolve stage runs without a picture: it reads the artifacts', async () => {
+    const { code, out, err } = await run(['measure', '--stages', 'resolve', '--dry-run']);
+    assert.equal(code, EXIT.ok, err);
+    assert.match(out, /resolve/);
+});
+
+test('an unknown stage is a usage error', async () => {
+    const { code, err } = await run(['measure', '--stages', 'nothing', '--dry-run']);
+    assert.equal(code, EXIT.usage);
+    assert.match(err, /Unknown stage/);
+});
+
 test('the config command prints the resolved configuration', async () => {
     const { code, out } = await run(['config']);
     assert.equal(code, EXIT.ok);

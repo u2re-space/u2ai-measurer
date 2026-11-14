@@ -49,7 +49,8 @@ Options:
                         design. Every stage may run alone; the work of a stage is written to the
                         output directory, so the stage after it reads the file of the stage before.
   -m, --model <id>      The model of the roles.
-      --effort <level>  The reasoning effort: low, medium, high, xhigh.
+      --effort <level>  The ceiling of the run: low, medium, high, xhigh. It lowers the effort
+                         a stage asks for, never raises it.
       --task <text>     The task the design direction answers.
   -c, --config <file>   The config file to use.
   -k, --colors <n>      How many colours the palette holds (default 5).
@@ -74,7 +75,9 @@ Exit codes:
 
 Examples:
   ai-measure measure screen.png
+  ai-measure measure screen.png --stages segmentate
   ai-measure measure screen.png --out ./tokens --task "a pricing page"
+  ai-measure measure screen.png --effort medium
   ai-measure palette screen.png --colors 6
   ai-measure crop screen.png --x 0 --y 0 --width 320 --height 80 --output top.png
   ai-measure split screen.png --rows 2 --cols 3 --out-dir tiles

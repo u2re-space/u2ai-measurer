@@ -30,7 +30,7 @@ import { instructions as resolverInstructions } from './resolver.js';
 import { instructions as designerInstructions } from './designer.js';
 import { parseResponse, textPart } from '../openai/responses.js';
 import { withModelFallback } from '../openai/fallback.js';
-import { getModelProfile, snapEffort } from '../model/profiles.js';
+import { getModelProfile, snapEffort, capEffort } from '../model/profiles.js';
 import { documentationFor } from '../agent/documentation.js';
 
 /**
@@ -101,11 +101,13 @@ export function roleContext(config, name) {
  * what the model accepts and to the ceiling of the role.
  * @param {object} config
  * @param {string} name
- * @param {{ model?: string|null, effort?: string|null }} [overrides] settings of this run
+ * @param {{ model?: string|null, effort?: string|null, ceiling?: string|null }} [overrides]
+ *   settings of this run: `effort` is what the stage asks for, `ceiling` is the promise the
+ *   user made about the money of the run.
  * @returns {{ name: string, model: string|null, effort: string|null, instructions: string|null, tools: string[]|null, context: string|null }}
  * @exports
  */
-export function resolveRole(config, name, { model = null, effort = null } = {}) {
+export function resolveRole(config, name, { model = null, effort = null, ceiling = null } = {}) {
     const roles = isRecord(config?.roles) ? config.roles : {};
     const role = isRecord(roles[name]) ? roles[name] : {};
     const fallback = isRecord(roles.default) ? roles.default : {};
@@ -121,15 +123,15 @@ export function resolveRole(config, name, { model = null, effort = null } = {}) 
     const resolvedModel = model ?? pick('model') ?? textOf(config?.model) ?? null;
     const profile = getModelProfile(resolvedModel, config);
 
-    const wantedEffort = effort ?? pick('effort') ?? textOf(config?.reasoning?.effort) ?? null;
+    // The effort of the role in the config wins over the one of the stage: the role is the
+    // narrower name of the same worker.
+    const wantedEffort = pick('effort') ?? effort ?? textOf(config?.reasoning?.effort) ?? null;
     let resolvedEffort = snapEffort(wantedEffort, profile);
-    const maxEffort = pick('maxEffort');
-    if (maxEffort) {
-        const capped = snapEffort(maxEffort, profile);
-        if (capped && resolvedEffort) {
-            const order = ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'];
-            if (order.indexOf(resolvedEffort) > order.indexOf(capped)) resolvedEffort = capped;
-        }
+    // Two ceilings: the one of the role and the one of the run. The lower of them wins.
+    for (const cap of [pick('maxEffort'), ceiling]) {
+        if (!cap || !resolvedEffort) continue;
+        const snapped = snapEffort(cap, profile);
+        if (snapped) resolvedEffort = capEffort(resolvedEffort, snapped);
     }
 
     return {
@@ -145,26 +147,32 @@ export function resolveRole(config, name, { model = null, effort = null } = {}) 
 /**
  * Create a role runner bound to a client.
  * @param {{ client: object, config?: object, model?: string|null, effort?: string|null,
- *   toolset?: object|null, skills?: object|null, onEvent?: Function|null }} opts
+ *   ceiling?: string|null, toolset?: object|null, skills?: object|null, onEvent?: Function|null }} opts
  *   `skills` maps a role name to the text of its skill pack.
+ *   `effort` is the effort a role gets when it does not ask for one; `ceiling` is the promise
+ *   the user made about the money of the run — it lowers the effort, never raises it.
  * @returns {{ run: Function, resolve: Function }}
  */
-export function createRoleRunner({ client, config = {}, model = null, effort = null, toolset = null, skills = null, onEvent = null } = {}) {
+export function createRoleRunner({ client, config = {}, model = null, effort = null, ceiling = null, toolset = null, skills = null, onEvent = null } = {}) {
     /**
      * Run one role.
      * @param {string} name role name
      * @param {{ text: string, parts?: object[], instructions?: string|null, schema?: object|null,
      *   schemaName?: string|null, schemaMode?: 'auto'|'tool'|'separate', maxTurns?: number,
-     *   model?: string|null, effort?: string|null,
+     *   model?: string|null, effort?: string|null, ceiling?: string|null,
      *   signal?: AbortSignal|null, extraTools?: object[], withDocumentation?: boolean }} [params]
      * @returns {Promise<{ status: string, data: object|null, text: string, toolCalls: object[], usage: object|null, error: string|null, model: string|null, trace: object[] }>}
      */
     async function run(name, {
         text = '', parts = [], instructions = null, schema = null, schemaName = null,
         schemaMode = 'auto', maxTurns = 1, model: runModel = null, effort: runEffort = null,
-        signal = null, extraTools = null, withDocumentation = true,
+        ceiling: runCeiling = null, signal = null, extraTools = null, withDocumentation = true,
     } = {}) {
-        const role = resolveRole(config, name, { model: runModel ?? model, effort: runEffort ?? effort });
+        const role = resolveRole(config, name, {
+            model: runModel ?? model,
+            effort: runEffort ?? effort,
+            ceiling: runCeiling ?? ceiling,
+        });
         const skillText = typeof skills?.[name] === 'string' ? skills[name].trim() : '';
         const docs = withDocumentation ? roleContext(config, name) : '';
 

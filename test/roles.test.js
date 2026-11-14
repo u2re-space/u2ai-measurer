@@ -52,6 +52,37 @@ test('the role of a role limits its effort', () => {
     assert.equal(resolveRole(config, 'measurer').effort, 'low');
 });
 
+test('the ceiling of the run lowers the effort of the stage and never raises it', () => {
+    const config = configFor({ model: 'moonshotai/kimi-k3.1-pro', reasoning: { effort: 'xhigh' } });
+    // The stage asks for a lot, the run promises less: the promise wins.
+    assert.equal(resolveRole(config, 'measurer', { effort: 'xhigh', ceiling: 'medium' }).effort, 'medium');
+    // A stage that asks for less than the ceiling keeps its own effort.
+    assert.equal(resolveRole(config, 'measurer', { effort: 'low', ceiling: 'xhigh' }).effort, 'low');
+    // Without a ceiling the stage keeps what it asks for.
+    assert.equal(resolveRole(config, 'measurer', { effort: 'high' }).effort, 'high');
+});
+
+test('the effort of the role wins over the effort of the stage', () => {
+    const config = configFor({
+        model: 'moonshotai/kimi-k3.1-pro',
+        reasoning: { effort: 'high' },
+        roles: { default: {}, measurer: { effort: 'low' } },
+    });
+    assert.equal(resolveRole(config, 'measurer', { effort: 'xhigh' }).effort, 'low');
+});
+
+test('the two ceilings of a role are the lower of them', () => {
+    const config = configFor({
+        model: 'moonshotai/kimi-k3.1-pro',
+        reasoning: { effort: 'xhigh' },
+        roles: { default: {}, measurer: { maxEffort: 'medium' } },
+    });
+    // The role caps at medium, the run at high: medium wins.
+    assert.equal(resolveRole(config, 'measurer', { effort: 'xhigh', ceiling: 'high' }).effort, 'medium');
+    // The run caps at low, the role at medium: low wins.
+    assert.equal(resolveRole(config, 'measurer', { effort: 'xhigh', ceiling: 'low' }).effort, 'low');
+});
+
 test('the documentation of a role comes from the config', () => {
     const config = configFor();
     assert.match(roleContext(config, 'measurer'), /CSS units/);

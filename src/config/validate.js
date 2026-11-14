@@ -103,7 +103,7 @@ function validateStage(id, section, fail) {
   if ('maxCrops' in known) {
     if (!(Number.isSafeInteger(section.maxCrops) && section.maxCrops >= 0)) fail(`${where}.maxCrops: целое >= 0`);
   }
-  for (const key of ['localEffort', 'aiEffort']) {
+  for (const key of ['localEffort', 'aiEffort', 'effort']) {
     if (key in known && !ENUMS.reasoningEfforts.includes(section[key])) {
       fail(`${where}.${key}: ${ENUMS.reasoningEfforts.join(' | ')}`);
     }

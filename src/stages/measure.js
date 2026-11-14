@@ -122,6 +122,7 @@ export async function runMeasureStage({
             schema: GEOMETRY_SCHEMA,
             schemaName: 'geometry',
             maxTurns,
+            effort: config?.stages?.measure?.effort ?? null,
             signal,
         });
         if (answer.error) {

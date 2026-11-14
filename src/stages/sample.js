@@ -153,7 +153,8 @@ export async function runSampleStage({
     const wanted = mode === 'ai'
         ? (config?.stages?.sample?.aiEffort ?? 'xhigh')
         : (config?.stages?.sample?.localEffort ?? 'low');
-    const stageEffort = capEffort(wanted, effort ?? config?.reasoning?.effort ?? null);
+    // The effort of the run is a ceiling: it lowers what the stage asks for, never raises it.
+    const stageEffort = capEffort(wanted, effort ?? null);
 
     const segmentation = await readStageFile(outDir, 'segmentation');
     if (!segmentation) {

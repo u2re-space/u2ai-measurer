@@ -7,7 +7,7 @@ reference picture and turns the measurements into a design guide a coder can use
 - Config in `~/.ai-measure/config.json`.
 - Node.js 26+, ESM, no SDK.
 
-The package has two roles — `measure` and `design` — and it does not generate images and does
+The package has six stages and an optional design stage — and it does not generate images and does
 not decompose a screenshot on its own: when a design needs an illustration or a decomposition,
 the agent calls the external `ai-image` and `ai-decompose` CLIs.
 
@@ -26,33 +26,82 @@ node bin/ai-measure.js --help
 
 ## Pipeline
 
-Three stages run in sequence. Each of them writes its own artifacts:
+Six stages run in sequence, and every one of them may run alone. Each stage writes its own file
+into `<out>/stages/` and reads the files of the stages before it from the same place: the file is
+the contract, not the state of the process.
 
 ```
 picture.png
     │
     ▼
 ┌─────────────────┐
-│  1. design      │  Optional: a visual direction, the assets and an HTML skeleton.
-│  (optional)     │  → .tmp/<id>/design.json, design-template.html, design-assets/
+│  1. segmentate  │  The zones of the reference and the box of each one.
+│                 │  → <out>/stages/segmentation.json
 └────────┬────────┘
          │
          ▼
 ┌─────────────────┐
-│  2. measure     │  The measurement sheet: geometry, colours, typography, rules.
-│                 │  → .tmp/<id>/crops/
+│  2. crop        │  The fragments, cut into files.
+│                 │  → <out>/crops/, <out>/stages/crops.json
 └────────┬────────┘
          │
          ▼
 ┌─────────────────┐
-│  3. resolve     │  The files a coder reads.
-│  (final)        │  → ./measurements/
+│  3. measure     │  The geometry of the zones: display, spacing, borders, padding.
+│                 │  → <out>/stages/geometry.json
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│  4. recognize   │  The texts and the typography they use.
+│                 │  → <out>/stages/recognition.json
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│  5. sample      │  The colours, read from the pixels and named.
+│                 │  → <out>/stages/palette.json
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│  6. resolve     │  The files a coder reads.
+│  (final)        │  → <out>/measurements.json, palette.json, tokens.css, ...
 └─────────────────┘
 ```
 
-The crops are cut inside the measurement stage: the measurer names the boxes, the harness cuts
-the pixels. A second pass (`agent.measurerPasses: 2`) hands the cut fragments back to the model
-so it can refine the details that were too small to read in the overview.
+The design stage is the seventh one and it is optional: `agent.design` decides whether it runs.
+
+### One stage at a time
+
+```bash
+ai-measure measure screen.png --stages segmentate    # only the zones
+ai-measure measure screen.png --stages segmentate,crop,measure
+ai-measure measure screen.png --stages resolve       # no picture needed: it reads the files
+```
+
+A stage that was named on the command line always runs — even the design stage, even when
+`agent.design` is `off`. The switch in the config (`stages.<id>.enabled: false`) is a hard switch
+and always wins: a stage that is off does not run, however it was asked for.
+
+The stages that look at a picture need one; the resolve stage only reads the files of the stages
+before it and runs without a picture and without a key.
+
+### The money
+
+Every stage asks for the reasoning effort it needs (`stages.<id>.effort`), and the run has a
+ceiling (`--effort`). The answer is the lower of the two: the ceiling lowers the effort of a
+stage, it never raises it. The ceiling of the role (`roles.<role>.maxEffort`) lowers it too.
+
+Two stages work in two ways, and the local way costs nothing:
+
+| Stage | `local` | `ai` |
+|-------|---------|-----|
+| `crop` | The harness cuts the boxes the segmentation named | The cropper reads the picture and names the fragments |
+| `sample` | The harness reads the pixels, the model only names the colours | The model samples the colours itself |
+| `resolve` | The harness joins the parts into one sheet | The resolver reconciles the parts |
+
+The default is `local` for all three.
 
 ## Commands
 
@@ -93,9 +142,9 @@ The first positional is the command when it names one, so `ai-measure screen.png
 |--------|---------|
 | `-i, --image <path>` | A reference picture. May be repeated. |
 | `-o, --out <dir>` | Where the artifacts go (default: `./measurements`). |
-| `--stages <list>` | The stages to run: `design`, `measure`, `resolve`. `crop` is an alias of `measure`. |
+| `--stages <list>` | The stages to run: `segmentate`, `crop`, `measure`, `recognize`, `sample`, `resolve`, `design`. Every stage may run alone. |
 | `-m, --model <id>` | The model of the roles. |
-| `--effort <level>` | The reasoning effort: `low`, `medium`, `high`, `xhigh`. |
+| `--effort <level>` | The ceiling of the run: `low`, `medium`, `high`, `xhigh`. It lowers the effort of a stage, never raises it. |
 | `--task <text>` | The task the design direction answers. |
 | `-c, --config <file>` | The config file to use. |
 | `-k, --colors <n>` | How many colours the palette holds (default 5). |
@@ -276,17 +325,17 @@ The starter file:
     { "baseURL": "https://routerai.ru/api/v1", "env": "ROUTERAI_API_KEY" }
   ],
   "agent": {
-    "measure": "auto",
-    "measureSource": "auto",
-    "measurerPasses": 1,
-    "measurerMaxTurns": 16,
-    "design": "off"
+    "design": "off",
+    "designerMaxTurns": 16
   },
   "stages": {
-    "crop": { "enabled": true },
-    "measure": { "enabled": true },
-    "design": { "enabled": true },
-    "resolve": { "enabled": true }
+    "segmentate": { "enabled": true, "effort": "medium", "maxTurns": 6 },
+    "crop": { "enabled": true, "mode": "local", "effort": "medium", "maxTurns": 6 },
+    "measure": { "enabled": true, "effort": "xhigh", "maxTurns": 8 },
+    "recognize": { "enabled": true, "effort": "xhigh", "maxTurns": 8 },
+    "sample": { "enabled": true, "mode": "local", "localEffort": "low", "aiEffort": "xhigh" },
+    "resolve": { "enabled": true, "mode": "local", "effort": "medium" },
+    "design": { "enabled": true, "effort": "xhigh", "maxTurns": 16 }
   }
 }
 ```
@@ -295,16 +344,20 @@ The knobs a user edits most often:
 
 | Field | Meaning |
 |-------|---------|
-| `agent.measure` | `off` \| `auto` \| `always` — when the measurement stage runs. `auto` runs it when there are references. |
-| `agent.measureSource` | `auto` \| `subrefs` \| `original` — which pictures the measurer measures. `subrefs` forces the derived sub-references. |
-| `agent.measurerPasses` | `1` = one overview sheet; `2` = the overview and then the staged fragments. |
-| `agent.measurerMaxTurns` | The tool turns of the measurement passes. |
-| `agent.maxCrops` | The cap of the automatic crops (default 192, `0` lifts it). |
-| `agent.design` | `off` \| `auto` \| `always` — when the design stage runs. `auto` runs it when there are references, a `DESIGN.md`, or design words in the task. |
+| `stages.<id>.enabled` | `false` switches the stage off for good: it does not run, even when it is named on the command line. |
+| `stages.<id>.effort` | The effort the stage asks for. The ceiling of the run (`--effort`) and the ceiling of the role (`roles.<name>.maxEffort`) lower it, never raise it. |
+| `stages.<id>.mode` | `local` (the harness does the work) or `ai` (the model does it) — for the stages that work in two ways: `crop`, `sample`, `resolve`. |
+| `stages.<id>.maxTurns` | The tool turns the role of the stage may spend. |
+| `stages.sample.localEffort` | The effort of the sampler when the harness read the colours: `low`. |
+| `stages.sample.aiEffort` | The effort of the sampler when the model reads the colours itself: `xhigh`. |
+| `stages.resolve.designMd` / `tokens` / `report` | Whether the resolve stage writes `DESIGN.md`, `tokens.css` and `report.md`. |
+| `agent.design` | `off` \| `auto` \| `always` — when the design stage runs on its own. A stage named on the command line runs anyway. |
 | `agent.designerMaxTurns` | The tool turns the designer may spend. |
 | `output.dir` | Where the artifacts go. |
 | `timeoutMs` | The idle timeout of one request, in milliseconds (default 900000, maximum 1800000). |
-| `roles.<name>.model` | The model of one role: `measurer`, `cropper`, `designer`. `roles.default` applies to every role without a model of its own. |
+| `roles.<name>.model` | The model of one role: `segmentator`, `cropper`, `measurer`, `recognizer`, `sampler`, `resolver`, `designer`. `roles.default` applies to every role without a model of its own. |
+| `roles.<name>.effort` | The effort of one role. It wins over the effort of the stage. |
+| `roles.<name>.maxEffort` | The ceiling of one role. |
 | `documentation.roles` | The standards a role is given: `cssUnits`, `cssColors`, `cssDisplay`, `cssShapes`, `cssTransform`, `cssMotion`, `cssContain`, `cssImages`, `cssMasking`, `cssFonts`, `cssGrid`, `cssFlex`, `wcagColors`, `phosphorIcons`, `lucideIcons`, `googleFonts`. |
 | `tools` | The switches of the tools: `read`, `write`, `list`, `search`, `image_view`, `image_crop`, `image_split`, `image_sample`, `color_parse`, `external_image`, `external_decompose`. |
 | `mcp.servers` | The MCP tool servers: `{ name, url }` or `{ name, command, args }`. |
@@ -366,7 +419,7 @@ The key comes from the `apiKey` field, from the `env` field of a backend, or fro
 | `src/agent/*` | The tools, the schemas, the skills, the documentation, the MCP client. |
 | `src/access/*` | The access layer: the files and the commands under one root, over a replaceable backend. |
 | `src/roles/*` | The instructions of the roles and the loop that talks to the API. |
-| `src/stages/*` | The three stages and the crops. |
+| `src/stages/*` | The stages of the pipeline, their files and the crops. |
 | `src/shared/pipeline.js` | The orchestrator of the stages. |
 
 ### The access layer

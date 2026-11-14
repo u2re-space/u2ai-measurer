@@ -165,14 +165,22 @@ export async function runPipeline({
         client,
         config,
         model,
-        effort,
+        // The effort of the run is a ceiling, not a setting: a stage asks for the effort it
+        // needs, and the promise of the user about the money lowers it.
+        effort: null,
+        ceiling: effort,
         toolset,
         skills,
         onEvent: (event) => notify({ type: 'api', ...event }),
     });
 
     // The stages that run in this configuration.
-    const selected = requestedStages ?? STAGES.map((stage) => stage.id);
+    //
+    // A stage the user named on the command line runs: the gate of `agent.design` decides
+    // whether the design stage runs on its own, not whether an explicit request is honoured.
+    // The switch of the config (`stages.<id>.enabled: false`) is a hard switch and always wins.
+    const explicit = Array.isArray(requestedStages) && requestedStages.length > 0;
+    const selected = explicit ? requestedStages : STAGES.map((stage) => stage.id);
     const hasDesignMd = await exists(path.join(root, 'DESIGN.md'));
     const enabled = STAGES.filter((stage) => (
         selected.includes(stage.id)
@@ -180,6 +188,7 @@ export async function runPipeline({
     ));
     const toRun = enabled.filter((stage) => {
         if (stage.id === 'design') {
+            if (explicit) return true;
             return shouldRunDesign(config, { hasReferences: references.length > 0, hasDesignMd, task });
         }
         // The stages that look at a picture need one.
@@ -219,7 +228,9 @@ export async function runPipeline({
         client,
         roles,
         model,
+        /** The effort of the run: a ceiling, never a setting. */
         effort,
+        ceiling: effort,
         task,
         signal,
         toolset,

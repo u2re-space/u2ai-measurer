@@ -294,6 +294,50 @@
 - [x] README (EN), planned.md (RU)
 - [x] Проверка: `npm test` — 157 тестов, все проходят
 
+### step-c12 — Мёртвые поля уходят, конфиг говорит о стадиях
+- [x] Проблема: конфиг описывал стадии, которых больше нет, и прятал живые настройки в
+      мёртвых полях — `agent.measure`, `agent.measureSource`, `agent.measurerPasses`
+- [x] `src/config/defaults.js` — секция `stages` со всеми стадиями, в `agent` остались только
+      `design` и `designerMaxTurns`
+- [x] `src/config/constants.js` — `ENUMS.measureSources` и `ENUMS.measurePasses` удалены
+- [x] `src/config/validate.js` — неизвестные поля конфига отвергаются
+- [x] `~/.ai-measure/config.json` — переписан под новую схему
+
+### step-c13 — Сегментация: зоны и боксы
+- [x] `src/stages/segmentate.js` — стадия `segmentate`: модель называет зоны и их боксы
+- [x] `src/stages/artifacts.js` — контракт стадий: `<out>/stages/*.json`, чтение с диска
+- [x] `src/stages/references.js` — картинка прикрепляется с масштабом (`image.maxSide` 1536),
+      боксы приводятся к пикселям файла
+- [x] `src/roles/segmentator.js` — промпт сегментатора
+
+### step-c14 — Геометрия и тексты
+- [x] `src/stages/cropper.js` — стадия `crop`: два режима (`local` режет по зонам,
+      `ai` — роль `cropper` с `CROP_PLAN_SCHEMA`), кропы в `<out>/crops/`
+- [x] `src/stages/measure.js` — стадия `measure`: display, ширина, бордюры, padding, margin
+- [x] `src/stages/recognize.js` — стадия `recognize`: тексты и шрифты
+- [x] `src/roles/measurer.js`, `src/roles/recognizer.js` — промпты ролей
+
+### step-c15 — Цвета и сборка
+- [x] `src/stages/sample.js` — стадия `sample`: два режима (`local` — харнесс читает пиксели,
+      модель только называет; `ai` — модель сэмплирует сама), файл `stages/palette.json`
+- [x] `src/stages/resolve.js` — стадия `resolve`: `buildSheet`, `buildPalette`, `buildTokens`,
+      `buildDesignMd`, `buildReport`; legacy-форма `measurements.json` сохранена
+- [x] `src/model/profiles.js` — `capEffort(stageEffort, ceiling)`: нижний из двух уровней
+- [x] `src/stages/index.js` — реестр стадий
+
+### step-c16 — Стадии запускаются по одной
+- [x] `src/cli.js` — `--stages` выбирает стадии; картинка нужна только стадиям, которые её
+      читают; ключ — только стадиям, которые спрашивают модель
+- [x] `src/shared/pipeline.js` — явно названная стадия выполняется всегда, даже при
+      `agent.design: off`; `stages.<id>.enabled: false` — жёсткий выключатель
+- [x] `src/roles/index.js` — `resolveRole(config, role, {effort, ceiling})`: приоритет
+      `roles.<role>.effort` > усилие стадии > `reasoning.effort`; потолки роли и прогона понижают
+- [x] `src/config/defaults.js` — у каждой стадии своё `effort`; `src/config/validate.js` —
+      проверка значения
+- [x] `src/stages/index.js` — каждая стадия называет свой файл в артефактах прогона
+- [x] `src/help.js`, README (EN), planned.md (RU) — шесть стадий, артефакты, `--stages`
+- [x] Проверка: `npm test` — 181 тест, все проходят
+
 ---
 
 ## 2. Правила работы

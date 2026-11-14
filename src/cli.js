@@ -34,6 +34,28 @@ const pkg = require('../package.json');
 /** The exit codes of the CLI. */
 export const EXIT = Object.freeze({ ok: 0, failure: 1, usage: 2, aborted: 130 });
 
+/** The stages that look at a picture: without one they have nothing to read. */
+const PICTURE_STAGES = Object.freeze(new Set(['segmentate', 'crop', 'measure', 'recognize', 'sample']));
+
+/**
+ * Whether a stage asks the model for something.
+ *
+ * The crop stage asks the cropper only in the `ai` mode; in the `local` mode the harness cuts
+ * the fragments the segmentation named. The resolve stage asks the resolver only in the `ai`
+ * mode; in the `local` mode the harness joins the parts itself. The sampler always asks: the
+ * model names the colours the harness read.
+ * @param {string} id the stage id
+ * @param {object} config the resolved configuration
+ * @returns {boolean}
+ * @ai.hint pure
+ */
+function stageAsksModel(id, config) {
+    if (id === 'design') return true;
+    if (id === 'crop') return (config?.stages?.crop?.mode ?? 'local') === 'ai';
+    if (id === 'resolve') return (config?.stages?.resolve?.mode ?? 'local') === 'ai';
+    return PICTURE_STAGES.has(id);
+}
+
 /**
  * Parse the arguments of the CLI.
  *
@@ -359,14 +381,28 @@ export async function main(argv = process.argv.slice(2)) {
     }
 
     // The commands that talk to the model.
-    if (!opts.images.length) {
-        return usage(`The ${opts.command} command needs at least one picture.`);
-    }
     const unknownStages = opts.stages.filter((stage) => !ENUMS.stages.includes(stage));
     if (unknownStages.length) {
         return usage(`Unknown stage: ${unknownStages.join(', ')}. The stages are: ${ENUMS.stages.join(', ')}.`);
     }
-    if (!opts.dryRun && !apiKeyAvailable(config)) {
+
+    // The design stage is the whole of the `design` command; `measure` runs the whole pipeline.
+    const stages = opts.command === 'design'
+        ? ['design']
+        : (opts.stages.length ? opts.stages : null);
+
+    // A picture is needed by the stages that look at one. The resolve stage only reads the
+    // artifacts of the stages before it, so it runs without a picture.
+    const selected = stages ?? ENUMS.stages;
+    const needsPicture = selected.some((id) => PICTURE_STAGES.has(id));
+    if (needsPicture && !opts.images.length) {
+        return usage(`The ${opts.command} command needs at least one picture.`);
+    }
+
+    // The key is needed by the stages that ask the model. The local stages — the harness cuts
+    // the fragments, reads the pixels and joins the parts — run without a key.
+    const asksModel = selected.some((id) => stageAsksModel(id, config));
+    if (!opts.dryRun && asksModel && !apiKeyAvailable(config)) {
         console.error('No API key: set AI_MEASURE_API_KEY, put "apiKey" into ~/.ai-measure/config.json, '
             + 'or give a backend the name of an environment variable that holds the key.');
         return EXIT.failure;
@@ -376,11 +412,6 @@ export async function main(argv = process.argv.slice(2)) {
     const renderer = isTTY
         ? createRenderer({ verbose: opts.verbose })
         : createPlainRenderer({ verbose: opts.verbose });
-
-    // The design stage is the whole of the `design` command; `measure` runs the whole pipeline.
-    const stages = opts.command === 'design'
-        ? ['design']
-        : (opts.stages.length ? opts.stages : null);
 
     try {
         const client = await createClient({

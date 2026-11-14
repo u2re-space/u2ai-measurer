@@ -154,6 +154,8 @@ export const defaults = {
       enabled: true,
       /** Max agent turns the segmentator may spend. */
       maxTurns: 6,
+      /** The effort the stage asks for. The ceiling of the run may lower it, never raise it. */
+      effort: 'medium',
     },
     crop: {
       enabled: true,
@@ -163,16 +165,22 @@ export const defaults = {
       maxTurns: 6,
       /** Cap of the fragments one run cuts; 0 lifts the cap. */
       maxCrops: 192,
+      /** The effort the stage asks for. */
+      effort: 'medium',
     },
     measure: {
       enabled: true,
       /** Max agent turns the measurer may spend. */
       maxTurns: 8,
+      /** The effort the stage asks for: the geometry is a style decision, so it asks for a lot. */
+      effort: 'xhigh',
     },
     recognize: {
       enabled: true,
       /** Max agent turns the recognizer may spend. */
       maxTurns: 8,
+      /** The effort the stage asks for: the typography is a style decision, so it asks for a lot. */
+      effort: 'xhigh',
     },
     sample: {
       enabled: true,
@@ -191,6 +199,8 @@ export const defaults = {
       mode: 'local',
       /** Max agent turns the resolver may spend in the ai mode. */
       maxTurns: 4,
+      /** The effort the stage asks for in the ai mode. */
+      effort: 'medium',
       /** Write DESIGN.md next to the measurements. */
       designMd: true,
       /** Write a CSS token file next to the measurements. */
@@ -202,6 +212,8 @@ export const defaults = {
       enabled: true,
       /** Max agent turns for the designer role. */
       maxTurns: 16,
+      /** The effort the stage asks for: the direction is a style decision, so it asks for a lot. */
+      effort: 'xhigh',
       /** Write an HTML skeleton next to the design direction. */
       template: true,
     },

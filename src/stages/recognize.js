@@ -106,6 +106,7 @@ export async function runRecognizeStage({
             schema: RECOGNITION_SCHEMA,
             schemaName: 'recognition',
             maxTurns,
+            effort: config?.stages?.recognize?.effort ?? null,
             signal,
         });
         if (answer.error) {

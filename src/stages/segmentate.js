@@ -69,6 +69,7 @@ export async function runSegmentStage({
             schema: SEGMENTATION_SCHEMA,
             schemaName: 'segmentation',
             maxTurns,
+            effort: config?.stages?.segmentate?.effort ?? null,
             signal,
         });
         if (answer.error) {

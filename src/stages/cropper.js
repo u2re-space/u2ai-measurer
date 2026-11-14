@@ -209,6 +209,7 @@ async function askCropper({ root, workId, config, runner, references, segmentati
             schema: CROP_PLAN_SCHEMA,
             schemaName: 'crop_plan',
             maxTurns,
+            effort: config?.stages?.crop?.effort ?? null,
             signal,
         });
         if (answer.error) {

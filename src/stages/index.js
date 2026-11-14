@@ -11,6 +11,9 @@
  * @ai.hint legacy-0.2
  */
 
+import path from 'node:path';
+import { stat } from 'node:fs/promises';
+
 import { runDesignStage, shouldRunDesign } from './design.js';
 import { runMeasureStage } from './measure.js';
 import { runSegmentStage } from './segmentate.js';
@@ -18,6 +21,25 @@ import { runCropStage } from './cropper.js';
 import { runRecognizeStage } from './recognize.js';
 import { runSampleStage } from './sample.js';
 import { runResolve, MEASUREMENTS_FILE } from './resolve.js';
+
+/**
+ * Note the file a stage wrote: the run tells the reader what it left on the disk.
+ *
+ * A stage that runs alone writes one file and nothing else — the run has to name it, or the
+ * reader has to go looking for it.
+ * @param {object} state the pipeline state
+ * @param {Function} notify event callback
+ * @param {string|null} file the file the stage wrote
+ * @returns {Promise<void>}
+ * @ai.hint io
+ */
+async function noteStageFile(state, notify, file) {
+    if (!file) return;
+    const rel = path.relative(state.root, file).split(path.sep).join('/');
+    const bytes = await stat(file).then((info) => info.size).catch(() => 0);
+    state.artifacts.push(rel);
+    notify?.({ type: 'artifact', file: rel, bytes });
+}
 
 /**
  * The design stage: the visual direction of the project.
@@ -62,6 +84,7 @@ async function measureStage(state, notify) {
     });
     state.geometry = result.geometry;
     state.warnings.push(...result.warnings);
+    await noteStageFile(state, notify, result.file);
 }
 
 /**
@@ -84,6 +107,7 @@ async function recognizeStage(state, notify) {
     });
     state.recognition = result.recognition;
     state.warnings.push(...result.warnings);
+    await noteStageFile(state, notify, result.file);
 }
 
 /**
@@ -106,6 +130,7 @@ async function segmentateStage(state, notify) {
     });
     state.segmentation = result.segmentation;
     state.warnings.push(...result.warnings);
+    await noteStageFile(state, notify, result.file);
 }
 
 /**
@@ -128,6 +153,7 @@ async function cropStage(state, notify) {
     });
     state.crops = result.crops;
     state.warnings.push(...result.warnings);
+    await noteStageFile(state, notify, result.file);
 }
 
 /**
@@ -151,6 +177,7 @@ async function sampleStage(state, notify) {
     });
     state.palette = result.palette;
     state.warnings.push(...result.warnings);
+    await noteStageFile(state, notify, result.file);
 }
 
 /**
@@ -176,7 +203,7 @@ async function resolveStage(state, notify) {
 export const STAGE_DEFS = Object.freeze([
     { id: 'design', label: 'Design direction', role: 'designer', run: designStage, dir: 'design-assets', needsReferences: false },
     { id: 'segmentate', label: 'Segment the reference', role: 'segmentator', run: segmentateStage, dir: 'stages', needsReferences: true },
-    { id: 'crop', label: 'Cut the fragments', role: 'cropper', run: cropStage, dir: 'crops', needsReferences: false },
+    { id: 'crop', label: 'Cut the fragments', role: 'cropper', run: cropStage, dir: 'crops', needsReferences: true },
     { id: 'measure', label: 'Measure the zones', role: 'measurer', run: measureStage, dir: 'stages', needsReferences: true },
     { id: 'recognize', label: 'Read the texts', role: 'recognizer', run: recognizeStage, dir: 'stages', needsReferences: true },
     { id: 'sample', label: 'Read the colours', role: 'sampler', run: sampleStage, dir: 'stages', needsReferences: true },
