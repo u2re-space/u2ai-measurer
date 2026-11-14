@@ -226,7 +226,7 @@ export function cloneDefaults() {
 export function defaultConfigText() {
   const starter = {
     model: defaults.model,
-    reasoning: { effort: 'xhigh', summary: 'auto' },
+    reasoning: { effort: 'high', summary: 'auto' },
     backends: structuredClone(defaults.backends),
     agent: {
       measure: defaults.agent.measure,
