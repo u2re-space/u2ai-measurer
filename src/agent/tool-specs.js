@@ -166,13 +166,16 @@ export const TOOL_SPECS = Object.freeze({
     },
     search_files: {
         configKey: 'search',
-        description: 'Find files of the working directory whose name or content matches a text.',
+        description: 'Find files of the working directory. With inContent=1 it greps the content of the text '
+            + 'files; with inContent=0 it matches the paths of the files. The glob limits the files by their name.',
         parameters: {
             type: 'object',
             properties: {
                 query: str('The text to look for.'),
                 path: str('Directory to search in. Empty = the working directory.'),
                 inContent: int('1 to search the file content, 0 to search the file names only.'),
+                regex: int('1 to read the query as a regular expression.'),
+                glob: str('The names of the files to search in, like `*.png`. Empty = every file.'),
             },
             required: ['query'],
             additionalProperties: false,

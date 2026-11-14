@@ -149,6 +149,29 @@ export async function runExternalCli(name, args, { root = PACKAGE_ROOT, env = pr
 }
 
 /**
+ * The matcher of a pattern of the names of the files.
+ *
+ * A pattern is a glob: `*` is any text except the slash, `**` is any text, `?` is one
+ * character. A pattern without a slash matches the name of the file, a pattern with a
+ * slash matches the path of the file from the root.
+ * @param {string} pattern
+ * @returns {RegExp|null}
+ * @exports
+ * @ai.hint pure
+ */
+export function globMatcher(pattern) {
+    const text = String(pattern ?? '').trim();
+    if (!text) return null;
+    const body = text
+        .replace(/[.+^${}()|[\]\\]/g, '\\$&')
+        .replace(/\*\*\//g, '(?:.*/)?')
+        .replace(/\*\*/g, '.*')
+        .replace(/\*/g, '[^/]*')
+        .replace(/\?/g, '[^/]');
+    return new RegExp(`^${body}$`, 'i');
+}
+
+/**
  * Turn a name into a token the API accepts.
  * @param {string} value
  * @returns {string}
@@ -368,15 +391,28 @@ export function createToolset({ root, config, role = null, mcp = [], writeDirs =
                 const query = String(args.query ?? '');
                 const files = await walk(located.abs, 6, []);
                 const inContent = args.inContent !== 0 && args.inContent !== false;
+                const regex = Boolean(args.regex);
+                const names = globMatcher(String(args.glob ?? ''));
+                // A pattern without a slash names the files, a pattern with a slash names the paths.
+                const onName = !String(args.glob ?? '').trim().includes('/');
+                let matcher = null;
+                if (regex) {
+                    try { matcher = new RegExp(query, 'i'); }
+                    catch (error) { throw new Error(`The regular expression is wrong: ${error.message}`); }
+                }
                 const hits = [];
                 for (const file of files) {
                     const rel = toPosix(path.relative(root, file));
+                    if (names && !names.test(onName ? path.posix.basename(rel) : rel)) continue;
                     if (!inContent) {
-                        if (rel.toLowerCase().includes(query.toLowerCase())) hits.push(rel);
+                        const hit = matcher ? matcher.test(rel) : rel.toLowerCase().includes(query.toLowerCase());
+                        if (hit) hits.push(rel);
                         continue;
                     }
                     const body = await readFile(file, 'utf-8').catch(() => null);
-                    if (body && body.toLowerCase().includes(query.toLowerCase())) hits.push(rel);
+                    if (body === null) continue;
+                    const hit = matcher ? matcher.test(body) : body.toLowerCase().includes(query.toLowerCase());
+                    if (hit) hits.push(rel);
                     if (hits.length >= 200) break;
                 }
                 return hits.length ? hits.join('\n') : '(no matches)';

@@ -139,6 +139,25 @@ test('the search_files tool finds the files by their content', async () => {
     }
 });
 
+test('the search_files tool finds the files by their names and by a glob', async () => {
+    const { root, cleanup } = await workspace();
+    try {
+        const toolset = createToolset({ root, config: { tools: {} } });
+        // The names: the paths of the files themselves.
+        const names = await toolset.execute('search_files', { query: 'notes', inContent: 0 });
+        assert.match(names, /notes\.md/);
+        assert.doesNotMatch(names, /picture\.png/);
+        // The glob cuts the files before they are read.
+        const md = await toolset.execute('search_files', { query: 'quick', inContent: 1, glob: '*.md' });
+        assert.match(md, /notes\.md/);
+        // The regular expression finds the content.
+        const regex = await toolset.execute('search_files', { query: 'quick.*fox', regex: 1 });
+        assert.match(regex, /notes\.md/);
+    } finally {
+        await cleanup();
+    }
+});
+
 test('the write_file tool writes into the directory that was opened', async () => {
     const { root, cleanup } = await workspace();
     try {

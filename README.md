@@ -377,6 +377,10 @@ it, and a file may only be written into the directories the stage opened.
 and its WCAG contrast against a second colour. The colour spaces come from
 [culori](https://culorijs.org/): sRGB, Display-P3, HSL, HWB, OKLab, OKLCH, LAB, LCH and XYZ.
 
+`search_files` greps the text of the files (`inContent=1`) or matches the paths of the files
+(`inContent=0`). `glob` limits the files by their name before they are read (`*.png`,
+`src/**/*.js`), and `regex` reads the query as a regular expression.
+
 The external CLIs are called as subprocesses. The binary is looked up in `AI_IMAGE_BIN` (or
 `AI_DECOMPOSE_BIN`), in the sibling checkout `u2ai-images` (or `u2ai-decomposer`) next to this
 package, in `submodules/u2ai-images` (or `submodules/u2ai-decomposer`), in the installed package
