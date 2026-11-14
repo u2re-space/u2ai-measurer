@@ -201,6 +201,12 @@
 - [x] `src/config/defaults.js` — выключатель `tools.color_parse`
 - [x] `test/color-space.test.js`
 
+### step-20 — Спецификации CSS
+- [x] `src/agent/documentation.js` — `cssColors` (пространства цветов, alpha, `color-mix`,
+      ΔE00) и `cssDisplay` (`display`, `position`, стек, box model, overflow)
+- [x] `src/config/constants.js` — новые источники в `documentationSources`
+- [x] `src/config/defaults.js` — `cssColors` и `cssDisplay` в ролях
+
 ---
 
 ## 2. Правила работы

@@ -38,7 +38,7 @@ export const ENUMS = Object.freeze({
   rasterEngines: Object.freeze(['auto', 'sharp', 'canvas', 'magick']),
   /** The documentation sources a role may be given. */
   documentationSources: Object.freeze([
-    'cssUnits', 'cssShapes', 'cssTransform', 'cssMotion', 'cssContain',
+    'cssUnits', 'cssColors', 'cssDisplay', 'cssShapes', 'cssTransform', 'cssMotion', 'cssContain',
     'cssImages', 'cssMasking', 'cssFonts', 'cssGrid', 'cssFlex',
     'phosphorIcons', 'lucideIcons', 'googleFonts', 'wcagColors',
   ]),

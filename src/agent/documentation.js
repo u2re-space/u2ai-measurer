@@ -47,6 +47,83 @@ Rules for a measurement sheet:
 - never mix units inside one value;
 - state the assumed root size and every conversion in the notes.`,
 
+    cssColors: `# CSS colours
+
+A colour in CSS is one of the notations below; they are the same colour, and a sheet may
+carry more than one of them when the reader has to check the value.
+
+- hex: \`#f1463f\`, \`#f1463fff\` (with alpha), \`#f14\` (short).
+- rgb: \`rgb(241 70 63)\`, \`rgb(241 70 63 / 0.5)\`. The legacy comma form is the same.
+- hsl: \`hsl(2.4 86.4% 59.6%)\` — hue in degrees, saturation and lightness in percents.
+- hwb: \`hwb(2.4 24.7% 5.5%)\` — hue, whiteness, blackness.
+- oklab: \`oklab(0.6414 0.1857 0.0953)\` — lightness, a, b on the perceptual axes.
+- oklch: \`oklch(0.6414 0.2087 27.18)\` — lightness, chroma, hue. The most stable notation:
+  two readers with a different gamma still agree on the lightness of an OKLCH colour.
+- lab: \`lab(56.35 65.42 44.3)\`, lch: \`lch(56.35 79.01 34.1)\` — the CIE spaces.
+- Display-P3: \`color(display-p3 0.8726 0.329 0.2822)\` — wider than sRGB.
+- \`currentColor\` takes the colour of the element; \`transparent\` is \`rgb(0 0 0 / 0)\`.
+
+The spaces and the rules:
+- sRGB is the default space of a screen; a hex value is the sRGB truth of the bytes.
+- OKLCH is the notation to prefer for a token: its lightness is perceptual, so a dark grey
+  reads as dark grey in every colour management.
+- HSL is what designers quote, but its lightness is not perceptual: a saturated yellow and a
+  saturated blue with the same HSL lightness are not equally bright.
+- LAB/LCH are the measurement spaces: use them to compare two colours that do not share a hue.
+- Display-P3 only matters when the target display is wide-gamut; check that the colour still
+  fits sRGB before shipping a hex.
+
+Alpha:
+- \`rgb(241 70 63 / 0.5)\` is a translucent colour; it has no contrast of its own — it has the
+  contrast of the composite over the surface it sits on.
+- \`color-mix(in oklab, #f1463f 50%, white)\` mixes two colours in a named space; mixing in
+  sRGB is the default and is the one that shifts the hue the most.
+
+Measure and report:
+- sample the pixels with \`sample_colors\` — that is the ground truth;
+- convert a quoted colour with \`parse_color\` — that is the exact value of the text;
+- never present a perceived colour as a sampled one.
+
+The difference between two colours is measured as CIEDE2000 (\`ΔE00\`): below 1 is the same
+colour, 1..2 is a difference nobody sees, 2..10 is a visible difference, above 10 is another
+colour.`,
+
+    cssDisplay: `# CSS display, position and layout
+
+\`display\` decides how a box takes part in the layout:
+- \`block\` — a box on its own line, the default of a div.
+- \`inline\` — a box in the text flow; width and height do not apply.
+- \`inline-block\` — inline, but it keeps its own box, so width, height and padding apply.
+- \`flex\` / \`inline-flex\` — the children are flex items.
+- \`grid\` / \`inline-grid\` — the children are grid items.
+- \`contents\` — the box disappears and the children take its place.
+- \`flow-root\` — a block that contains its floats.
+- \`none\` — the box is not rendered at all.
+
+\`position\`:
+- \`static\` — the default, the box follows the flow.
+- \`relative\` — the box stays in the flow but is offset by \`top\`/\`right\`/\`bottom\`/\`left\`.
+- \`absolute\` — the box leaves the flow and is placed against the nearest positioned ancestor.
+- \`fixed\` — the box is placed against the viewport.
+- \`sticky\` — the box follows the scroll until its container ends.
+
+Stacking: \`z-index\` only works on a positioned element or a flex/grid item; the default is
+\`auto\`, and a negative value puts the element behind the content of its stacking context.
+
+The box model: \`content-box\` (the default) adds padding and border to the width,
+\`border-box\` (the common choice) takes them out of it. Every measurement is the border box
+unless the sheet says otherwise.
+
+Overflow and clipping: \`overflow: hidden | scroll | auto | clip\`, \`overflow-x\` and
+\`overflow-y\` for one axis. A picture with rounded corners is clipped by
+\`border-radius\` and \`overflow: hidden\` together.
+
+Gaps and spacing: \`gap\` (grid and flex), \`margin\` (outside the box, may be negative),
+\`padding\` (inside the box, never negative).
+
+In a measurement sheet, report the display of the element, its position, its z-index when it
+overlaps another box, and the box model in use — a coder cannot rebuild the layout without them.`,
+
     cssShapes: `# CSS shapes
 
 Border radius: \`border-radius: <radius>\` — one value for all corners, four values for

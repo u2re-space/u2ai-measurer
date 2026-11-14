@@ -193,8 +193,8 @@ export const defaults = {
    */
   documentation: {
     roles: {
-      measurer: ['cssUnits', 'cssShapes', 'cssTransform', 'cssFonts', 'cssGrid', 'cssFlex', 'wcagColors'],
-      designer: ['cssUnits', 'cssShapes', 'cssFonts', 'cssGrid', 'cssFlex', 'phosphorIcons', 'lucideIcons', 'googleFonts'],
+      measurer: ['cssUnits', 'cssColors', 'cssDisplay', 'cssShapes', 'cssTransform', 'cssFonts', 'cssGrid', 'cssFlex', 'wcagColors'],
+      designer: ['cssUnits', 'cssColors', 'cssDisplay', 'cssShapes', 'cssFonts', 'cssGrid', 'cssFlex', 'phosphorIcons', 'lucideIcons', 'googleFonts'],
     },
   },
 
