@@ -305,9 +305,31 @@ The key comes from the `apiKey` field, from the `env` field of a backend, or fro
 | `src/openai/*` | The Responses API client, the Chat Completions fallback, the backends. |
 | `src/image/*` | The raster layer: `sharp` first, `canvas` second, ImageMagick last. |
 | `src/agent/*` | The tools, the schemas, the skills, the documentation, the MCP client. |
+| `src/access/*` | The access layer: the files and the commands under one root, over a replaceable backend. |
 | `src/roles/*` | The instructions of the roles and the loop that talks to the API. |
 | `src/stages/*` | The three stages and the crops. |
 | `src/shared/pipeline.js` | The orchestrator of the stages. |
+
+### The access layer
+
+`src/access` is the door between the model and the machine: the files and the commands under one
+root. Both halves work through a backend, so the same rules hold on a native disk, in the memory,
+or over a remote one.
+
+```js
+import { createAccess } from './src/access/index.js';
+
+const access = createAccess({ root: process.cwd() });
+
+await access.fs.writeText('notes/todo.md', '# todo');
+const found = await access.fs.search({ query: 'todo' });
+const answer = await access.exec.run('node', ['--version']);
+```
+
+The rules of the paths live in one place and are never optional: a path may not leave the root —
+neither through `..` nor through a symbolic link — the secret files and the secret directories are
+never accessible, and the read-only directories may be read, but never written. `src/agent/paths.js`
+keeps the words of the refusals and borrows the rules from `src/access/paths.js`.
 
 ### The roles
 
