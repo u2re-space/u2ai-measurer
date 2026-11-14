@@ -65,6 +65,24 @@ function linesOf(e, { verbose = false } = {}) {
             ];
         case 'warning':
             return [{ text: `warning: ${e.message}`, level: 'warn' }];
+        case 'request.wait': {
+            const seconds = Math.max(1, Math.round((e.elapsedMs ?? 0) / 1000));
+            return [{ text: `  thinking (${seconds}s)`, level: 'log' }];
+        }
+        case 'request.retry':
+            return [{
+                text: `  retry ${e.attempt ?? ''}${e.error ? `: ${e.error}` : ''}`,
+                level: 'warn',
+            }];
+        case 'request.error':
+            return [{
+                text: `  request failed${e.status ? ` (${e.status})` : ''}: ${e.error ?? ''}`,
+                level: 'warn',
+            }];
+        case 'tool.call':
+            return [{ text: `  tool: ${e.name ?? ''}`, level: 'log' }];
+        case 'request.start':
+            return verbose ? [{ text: `  [request] ${e.backend ?? ''} ${e.path ?? ''}`, level: 'log' }] : [];
         case 'api':
             return verbose ? [{ text: `  [api] ${e.type ?? ''} ${JSON.stringify(e)}`, level: 'log' }] : [];
         default:

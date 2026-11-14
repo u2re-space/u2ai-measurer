@@ -367,7 +367,13 @@ export async function main(argv = process.argv.slice(2)) {
         : (opts.stages.length ? opts.stages.map((stage) => (stage === 'crop' ? 'measure' : stage)) : null);
 
     try {
-        const client = await createClient({ config, signal: null });
+        const client = await createClient({
+            config,
+            signal: null,
+            // The events of the client go straight to the renderer: the heartbeat of a waiting
+            // request and a failed backend are part of what the reader has to see.
+            onEvent: (event) => renderer.event(event),
+        });
         const result = await runPipeline({
             root: process.cwd(),
             images: opts.images,

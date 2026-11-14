@@ -106,6 +106,17 @@ The first positional is the command when it names one, so `ai-measure screen.png
 | `--dry-run` | Print the plan and stop. |
 | `--verbose` | Print more. |
 
+### A long run
+
+A thinking model may work for minutes without a word. The terminal says so every 20 seconds —
+`thinking (40s)` — and the tool calls of a role are printed as they happen, so a quiet run is a
+run that is waiting, not a run that is stuck.
+
+The wait has a limit: `timeoutMs` (default `900000`, `AI_MEASURE_TIMEOUT_MS`) is the idle timeout
+of one request. It has to outlive the longest thinking of the model: a timeout cuts the request off
+and the answer is lost, so the default is generous. A request that fails is retried, and the retry
+is printed too.
+
 ### Exit codes
 
 | Code | Meaning |
@@ -245,6 +256,7 @@ The knobs a user edits most often:
 | `agent.design` | `off` \| `auto` \| `always` — when the design stage runs. `auto` runs it when there are references, a `DESIGN.md`, or design words in the task. |
 | `agent.designerMaxTurns` | The tool turns the designer may spend. |
 | `output.dir` | Where the artifacts go. |
+| `timeoutMs` | The idle timeout of one request, in milliseconds (default 900000, maximum 1800000). |
 | `roles.<name>.model` | The model of one role: `measurer`, `cropper`, `designer`. `roles.default` applies to every role without a model of its own. |
 | `documentation.roles` | The standards a role is given: `cssUnits`, `cssColors`, `cssDisplay`, `cssShapes`, `cssTransform`, `cssMotion`, `cssContain`, `cssImages`, `cssMasking`, `cssFonts`, `cssGrid`, `cssFlex`, `wcagColors`, `phosphorIcons`, `lucideIcons`, `googleFonts`. |
 | `tools` | The switches of the tools: `read`, `write`, `list`, `search`, `image_view`, `image_crop`, `image_split`, `image_sample`, `color_parse`, `external_image`, `external_decompose`. |

@@ -254,6 +254,16 @@
 - [x] Проверка: `test/tools.test.js` (имена, маска, регулярное выражение), `npm test` —
       146 тестов, все проходят
 
+### step-c8 — Тишина больше не значит зависание
+- [x] `src/openai/client.js` — пульс `request.wait` каждые 20 с, пока ответ не пришёл
+- [x] `src/cli.js` — события клиента уходят в рендерер
+- [x] `src/cli/renderer.js` — строки `thinking (Ns)`, `retry`, `request failed`, `tool:`
+- [x] `src/roles/index.js` — вызовы инструментов объявляются
+- [x] `src/config/defaults.js` — `timeoutMs` 900 с вместо 120 с: thinking-модель думает минутами
+- [x] `src/config/validate.js`, `src/config/env.js` — диапазон `timeoutMs` до 1 800 с
+- [x] README (EN), planned.md (RU)
+- [x] Проверка: `npm test` — 146 тестов, все проходят
+
 ---
 
 ## 2. Правила работы

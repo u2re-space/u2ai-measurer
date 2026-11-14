@@ -37,6 +37,9 @@ const defaults = Object.freeze({
 /** Headers the client sets itself; a backend header must not replace them. */
 const RESERVED_HEADERS = new Set(['authorization', 'content-type', 'accept', 'x-client-request-id']);
 
+/** How often the client says that it is still waiting for the model. */
+const WAIT_INTERVAL_MS = 20_000;
+
 /** RFC 7230 token characters for header names. */
 const HEADER_NAME = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/;
 
@@ -165,7 +168,7 @@ export function resolveBackends(config, { kind = 'text', model = null, env = pro
  */
 export async function createClient({ config, env = process.env, signal = null, onEvent = null } = {}) {
     const transport = createHttp({
-        idleTimeoutMs: Number.isSafeInteger(config?.timeoutMs) ? config.timeoutMs : 120_000,
+        idleTimeoutMs: Number.isSafeInteger(config?.timeoutMs) ? config.timeoutMs : 900_000,
         connectTimeoutMs: 30_000,
     });
     const retries = Number.isSafeInteger(config?.limits?.requestRetries)
@@ -337,26 +340,37 @@ export async function createClient({ config, env = process.env, signal = null, o
         if (!chain.length) {
             throw new ApiError('No backend is configured for this request.', { code: 'NO_BACKEND' });
         }
+        // A thinking model may work for minutes without a word. The heartbeat says that the
+        // run is alive: the silence of the terminal is not the hang of the run.
+        const waitStarted = Date.now();
+        const waitTimer = setInterval(() => {
+            announce({ type: 'request.wait', path, model, elapsedMs: Date.now() - waitStarted });
+        }, WAIT_INTERVAL_MS);
+        if (typeof waitTimer.unref === 'function') waitTimer.unref();
         let lastError = null;
-        for (const backend of chain) {
-            if (supports && backend.supports?.[supports] === false) {
-                announce({ type: 'request.skip', backend: backend.baseURL, reason: `no ${supports} route` });
-                continue;
+        try {
+            for (const backend of chain) {
+                if (supports && backend.supports?.[supports] === false) {
+                    announce({ type: 'request.skip', backend: backend.baseURL, reason: `no ${supports} route` });
+                    continue;
+                }
+                try {
+                    const answer = await callBackend(backend, path, {
+                        method, body, rawBody, contentType, signal: callSignal, stream, onEvent: callEvent, model,
+                    });
+                    return answer;
+                } catch (error) {
+                    lastError = error;
+                    const status = error?.status;
+                    announce({ type: 'request.error', backend: backend.baseURL, status: status ?? null, error: error.message });
+                    if (error?.name === 'AbortError' || error?.code === 'ABORTED') throw error;
+                    // A host without the route is not a host to retry: the caller picks another transport.
+                    if (supports === 'responses' && responsesRouteUnsupported(error)) break;
+                    // Otherwise the next backend gets the request.
+                }
             }
-            try {
-                const answer = await callBackend(backend, path, {
-                    method, body, rawBody, contentType, signal: callSignal, stream, onEvent: callEvent, model,
-                });
-                return answer;
-            } catch (error) {
-                lastError = error;
-                const status = error?.status;
-                announce({ type: 'request.error', backend: backend.baseURL, status: status ?? null, error: error.message });
-                if (error?.name === 'AbortError' || error?.code === 'ABORTED') throw error;
-                // A host without the route is not a host to retry: the caller picks another transport.
-                if (supports === 'responses' && responsesRouteUnsupported(error)) break;
-                // Otherwise the next backend gets the request.
-            }
+        } finally {
+            clearInterval(waitTimer);
         }
         throw lastError ?? new ApiError('No backend answered the request.', { code: 'NO_BACKEND' });
     }

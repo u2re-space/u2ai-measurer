@@ -248,6 +248,9 @@ export function createRoleRunner({ client, config = {}, model = null, effort = n
                 for (const [index, call] of parsed.toolCalls.entries()) {
                     const callId = call.callId ?? call.id ?? `call_${turn}_${index}`;
                     let output = '';
+                    // The reader sees the calls: a model that measures for minutes is doing
+                    // something, and the terminal must not look empty while it works.
+                    onEvent?.({ type: 'tool.call', name: call.name, arguments: call.arguments });
                     try {
                         output = await toolset.execute(call.name, call.arguments);
                     } catch (error) {

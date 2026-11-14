@@ -29,7 +29,14 @@ export const defaults = {
   models: {},
   reasoning: { effort: 'medium', summary: 'auto', mode: null },
   retries: 3,
-  timeoutMs: 120_000,
+  /**
+   * The idle timeout of a request, in milliseconds.
+   *
+   * A thinking model works for minutes without a word, and the answer comes in one piece:
+   * the timeout has to be longer than the longest thinking, or the request is cut off and
+   * repeated for nothing.
+   */
+  timeoutMs: 900_000,
 
   // --- HTTP backends -------------------------------------------------------
   /**
