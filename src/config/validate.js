@@ -176,6 +176,17 @@ export function validateConfig(config) {
   validateModelBackends(c.modelsBackends, fail);
   if (!isRecord(c.fallback)) fail('fallback должен быть объектом');
   if (typeof c.fallback.enabled !== 'boolean') fail('fallback.enabled: true | false');
+  if (c.fallback.models !== undefined) {
+    if (!isRecord(c.fallback.models)) fail('fallback.models должен быть объектом');
+    for (const [modelId, chain] of Object.entries(c.fallback.models)) {
+      if (!modelId.trim()) fail('fallback.models: пустое имя модели');
+      if (!Array.isArray(chain)) fail(`fallback.models.${modelId}: массив моделей`);
+      for (const item of chain) {
+        const id = typeof item === 'string' ? item : item?.model;
+        if (typeof id !== 'string' || !id.trim()) fail(`fallback.models.${modelId}: непустая строка или { model }`);
+      }
+    }
+  }
 
   for (const [key, value] of Object.entries(c.limits)) {
     if (!(key in defaults.limits)) fail(`неизвестный лимит limits.${key}`);

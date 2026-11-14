@@ -46,7 +46,18 @@ export const defaults = {
   ],
   /** Per-model host lists: { "<model>": [{ baseURL, apiKey?, prefix?, vendor?, suffix?, type? }] }. */
   modelsBackends: {},
-  fallback: { enabled: true, models: {} },
+  /**
+   * Model fallback: when a model fails, the next one of the chain answers instead.
+   * `models` maps a model to the models to try after it; the key `*` is the chain for every
+   * other model.
+   */
+  fallback: {
+    enabled: true,
+    models: {
+      'moonshotai/kimi-k3.1-pro': ['moonshotai/kimi-k3', 'openai/gpt-5.1', 'anthropic/claude-sonnet-5'],
+      '*': ['moonshotai/kimi-k3', 'openai/gpt-5.1'],
+    },
+  },
 
   // --- limits ---------------------------------------------------------------
   limits: {

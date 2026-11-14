@@ -176,6 +176,15 @@
       схемы; `parseJsonText` вытаскивает JSON из текста с fences и прозой
 - [x] `test/responses.test.js`
 
+### step-17 — Fallback систем и моделей
+- [x] `src/openai/fallback.js` — `fallbackWorthy`, `modelRefusal`, цепочка моделей, повтор всей
+      роли на следующей модели
+- [x] `src/roles/index.js` — `withModelFallback` вокруг цикла роли: следующая модель отвечает
+      на всю роль с первого хода, с картинкой
+- [x] `src/config/defaults.js` — цепочка моделей по умолчанию
+- [x] `src/config/validate.js` — проверка `fallback.models` с русскими сообщениями
+- [x] `test/fallback.test.js`
+
 ---
 
 ## 2. Правила работы
