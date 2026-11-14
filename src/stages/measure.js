@@ -21,7 +21,7 @@
 import path from 'node:path';
 import { GEOMETRY_SCHEMA } from '../agent/schemas.js';
 import { attachReference, attachmentBlock, splitReferences } from './references.js';
-import { readStageFile, writeStageFile } from './artifacts.js';
+import { cropRelPath, readStageFile, writeStageFile } from './artifacts.js';
 
 /**
  * The zones of one source, as a list a person and a model can read.
@@ -111,7 +111,10 @@ export async function runMeasureStage({
         ];
         if (fragments.length) {
             lines.push('', '# Fragments');
-            lines.push(fragments.map((crop) => `- ${crop.crop} — ${crop.kind} "${crop.name}"`).join('\n'));
+            // The paths count from the root of the run: that is where the model opens them.
+            lines.push(fragments
+                .map((crop) => `- ${cropRelPath({ root, outDir, crop: crop.crop })} — ${crop.kind} "${crop.name}"`)
+                .join('\n'));
         }
         lines.push('', '# Work directory', `.tmp/${workId}/`, '');
         lines.push('Measure the geometry of these zones. Give the numbers of the zones that carry them.');

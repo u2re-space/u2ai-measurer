@@ -372,6 +372,61 @@ test('the recognition stage reads the texts of the zones', async () => {
     }
 });
 
+test('the fragments are named from the root of the run', async () => {
+    const { root, cleanup } = await workspace();
+    try {
+        const outDir = path.join(root, 'measurements');
+        await writeStageFile(outDir, 'segmentation', {
+            generatedBy: 'ai-measure',
+            stage: 'segmentate',
+            sources: [{
+                source: 'picture.png',
+                canvas: { x: 0, y: 0, width: 100, height: 80 },
+                scale: 1,
+                zones: SEGMENTATION.zones,
+            }],
+        });
+        // The fragment lies in the output directory, but the model opens it from the root.
+        await mkdir(path.join(outDir, 'crops'), { recursive: true });
+        await sharp({
+            create: { width: 30, height: 10, channels: 4, background: { r: 10, g: 10, b: 10, alpha: 1 } },
+        }).png().toFile(path.join(outDir, 'crops', '02-detail-caption.png'));
+        await writeStageFile(outDir, 'crops', {
+            generatedBy: 'ai-measure',
+            stage: 'crop',
+            crops: [{
+                crop: 'crops/02-detail-caption.png',
+                kind: 'detail',
+                name: 'caption',
+                source: 'picture.png',
+            }],
+        });
+
+        const prompts = [];
+        const runner = {
+            roles: [],
+            run: async (role, params) => {
+                runner.roles.push(role);
+                prompts.push(params.text);
+                return { status: 'completed', data: RECOGNITION, text: '', toolCalls: [], usage: null, error: null };
+            },
+        };
+        await runRecognizeStage({
+            root,
+            workId: 'w1',
+            config: cloneDefaults(),
+            runner,
+            references: [{ kind: 'original', rel: 'picture.png' }],
+            outDir,
+        });
+
+        assert.equal(prompts.length, 1);
+        assert.match(prompts[0], /measurements\/crops\/02-detail-caption\.png/);
+    } finally {
+        await cleanup();
+    }
+});
+
 test('the segmentation stage writes the zones of the reference', async () => {
     const { root, cleanup } = await workspace();
     try {

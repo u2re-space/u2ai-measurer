@@ -16,7 +16,7 @@
  * @depends node:path, node:fs/promises
  * @usedBy stages
  * @exports STAGES_DIR, CROPS_DIR, stageFile, writeStageFile, readStageFile, zoneList, scaleBox,
- *          cropSlug
+ *          cropSlug, cropRelPath
  * @ai.tags stages, artifacts
  * @ai.hint io
  */
@@ -115,6 +115,24 @@ export function cropSlug(value, fallback = 'crop') {
         .replace(/^-+|-+$/g, '')
         .toLowerCase();
     return (base || fallback).slice(0, 48);
+}
+
+/**
+ * The path of a fragment the way the model has to name it.
+ *
+ * The fragments lie in the output directory, but the model works in the root of the run: a path
+ * that starts from the output directory does not open there. The path is therefore counted from
+ * the root, and it is written with slashes, the way the model reads it.
+ * @param {{ root: string, outDir?: string|null, crop?: string }} options
+ * @returns {string}
+ * @exports
+ * @ai.hint pure
+ */
+export function cropRelPath({ root, outDir = null, crop = '' }) {
+    const base = path.resolve(String(root ?? '.'));
+    const abs = path.resolve(outDir ? path.resolve(base, outDir) : base, String(crop ?? ''));
+    const rel = path.relative(base, abs);
+    return rel.split(path.sep).join('/');
 }
 
 /**

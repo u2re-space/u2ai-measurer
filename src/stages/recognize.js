@@ -20,7 +20,7 @@
 import path from 'node:path';
 import { RECOGNITION_SCHEMA } from '../agent/schemas.js';
 import { attachImage, attachmentBlock, splitReferences } from './references.js';
-import { readStageFile, writeStageFile } from './artifacts.js';
+import { cropRelPath, readStageFile, writeStageFile } from './artifacts.js';
 
 /** How many fragments one call may carry. */
 const MAX_FRAGMENTS = 12;
@@ -71,7 +71,11 @@ export async function runRecognizeStage({
             const image = await attachImage({ abs: file, config });
             if (!image) continue;
             parts.push(image.part);
-            captions.push({ rel: fragment.crop, role: 'fragment' });
+            // The caption is a path the model has to open: it counts from the root of the run.
+            captions.push({
+                rel: cropRelPath({ root, outDir, crop: fragment.crop }),
+                role: 'fragment',
+            });
         }
         // The whole picture when no fragment of the text zones was cut.
         if (!parts.length) {
