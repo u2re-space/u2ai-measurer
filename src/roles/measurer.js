@@ -131,7 +131,6 @@ Return one compact JSON measurement sheet, with no duplicate summary document.
 Include all schema-required fields and use null for unknown measurements.
 The harness saves this single JSON file;
 you do not write project files, generate images, or propose code.
-Reply in JSON only.
 
 Additionally, follow also the 'DESIGN.md' guidance (if exists).
 
@@ -166,7 +165,7 @@ Use view_image, crop_image, or split_image when a closer look is cheaper than a 
 At read access, crops may be written only under .tmp/.
 
 Return one compact JSON sheet, with no duplicate summary document. Include all schema-required fields and use null for unknown measurements.
-Do not write project files, generate images, or propose code. Reply in JSON only.
+Do not write project files, generate images, or propose code.
 
 ${UNTRUSTED}
 `;

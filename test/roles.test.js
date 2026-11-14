@@ -135,6 +135,88 @@ test('the runner executes the tools the model asks for and feeds the answers bac
     assert.match(second, /function_call_output/);
 });
 
+test('a role with tools looks first and answers afterwards', async () => {
+    const calls = [];
+    const client = {
+        responses: {
+            async create(params) {
+                calls.push(params);
+                if (calls.length === 1) {
+                    return {
+                        output: [{
+                            type: 'function_call',
+                            id: 'call-1',
+                            call_id: 'call-1',
+                            name: 'view_image',
+                            arguments: JSON.stringify({ path: 'picture.png' }),
+                        }],
+                        output_text: '',
+                    };
+                }
+                if (calls.length === 2) {
+                    return { output_text: 'I measured a box of 10 by 10.', output: [] };
+                }
+                return { output_text: JSON.stringify({ summary: 'done' }), output: [] };
+            },
+        },
+    };
+    const toolset = {
+        specsFor: () => [{ type: 'function', name: 'view_image', parameters: { type: 'object' } }],
+        async execute() { return 'Image picture.png: 10×10 png'; },
+    };
+    const runner = createRoleRunner({ client, config: configFor(), toolset });
+    const answer = await runner.run('measurer', {
+        text: 'measure',
+        parts: [{ type: 'input_image', image_url: 'data:image/png;base64,AA' }],
+        schema: MEASUREMENT_SCHEMA,
+        schemaName: 'measurement',
+        maxTurns: 3,
+    });
+    assert.equal(calls.length, 3);
+    // The first phase looks and carries no schema.
+    assert.equal(calls[0].schema, null);
+    assert.ok(calls[0].tools.length > 0);
+    // The second phase answers under the schema and calls no tool.
+    assert.equal(calls[2].tools, null);
+    assert.equal(calls[2].schemaChannel, 'format');
+    assert.deepEqual(answer.data, { summary: 'done' });
+});
+
+test('the schema travels as a tool when the mode says so', async () => {
+    const calls = [];
+    const client = {
+        responses: {
+            async create(params) {
+                calls.push(params);
+                return {
+                    output: [{
+                        type: 'function_call',
+                        id: 'call-1',
+                        call_id: 'call-1',
+                        name: 'measurement',
+                        arguments: JSON.stringify({ summary: 'done' }),
+                    }],
+                    output_text: '',
+                };
+            },
+        },
+    };
+    const toolset = {
+        specsFor: () => [{ type: 'function', name: 'view_image', parameters: { type: 'object' } }],
+        async execute() { return 'never'; },
+    };
+    const runner = createRoleRunner({ client, config: configFor(), toolset });
+    const answer = await runner.run('measurer', {
+        text: 'measure',
+        schema: MEASUREMENT_SCHEMA,
+        schemaName: 'measurement',
+        schemaMode: 'tool',
+        maxTurns: 3,
+    });
+    assert.equal(calls.length, 1);
+    assert.deepEqual(answer.data, { summary: 'done' });
+});
+
 test('a failed call is reported as an error, not as an exception', async () => {
     const client = {
         responses: {

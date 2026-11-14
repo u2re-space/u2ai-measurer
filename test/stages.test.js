@@ -455,10 +455,13 @@ test('the pipeline writes the artifacts and the crops of a real run', async () =
         // The crops are cut into the work directory.
         const crops = await stat(path.join(root, '.tmp', result.workId, 'crops')).then((info) => info.isDirectory());
         assert.ok(crops);
-        // The host was asked once, over the Responses route.
-        assert.equal(host.calls.length, 1);
+        // The host was asked twice over the Responses route: the model explores with the
+        // tools, and answers in the second call under the schema.
+        assert.equal(host.calls.length, 2);
         assert.match(host.calls[0].url, /\/v1\/responses$/);
         assert.ok(host.calls[0].body.input_text === undefined);
+        assert.ok(host.calls[0].body.text === undefined, 'the first call carries no schema');
+        assert.equal(host.calls[1].body.text?.format?.type, 'json_schema');
         assert.ok(events.some((event) => event.type === 'resolve.done'));
     } finally {
         await cleanup();

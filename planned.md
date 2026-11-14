@@ -185,6 +185,14 @@
 - [x] `src/config/validate.js` — проверка `fallback.models` с русскими сообщениями
 - [x] `test/fallback.test.js`
 
+### step-18 — Ответ в две фазы
+- [x] `src/roles/index.js` — цикл роли: исходное сообщение пользователя и картинка остаются
+      в каждом ходе; бюджет ходов сообщается модели
+- [x] `src/roles/index.js` — две фазы: сначала инструменты, потом ответ под схемой API
+- [x] `src/roles/measurer.js` — промпт без требования ответа в прозе
+- [x] `src/config/defaults.js` — `measurerMaxTurns: 16`, `stages.measure.maxTurns: 16`
+- [x] `test/roles.test.js`, `test/stages.test.js`
+
 ---
 
 ## 2. Правила работы

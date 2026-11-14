@@ -8,10 +8,11 @@
  * has a schema, plain text otherwise. A tool loop is optional: when a toolset is given, the calls
  * the model asks for are executed and the answers are fed back.
  *
- * Two rules keep the loop honest. The user message stays in every turn: a model that has called
+ * Three rules keep the loop honest. The user message stays in every turn: a model that has called
  * a tool has to see the picture it was asked about again, or the second turn measures a blank
- * wall. And the schema is the answer channel: the model returns the sheet as the arguments of
- * the schema tool, not as prose.
+ * wall. The schema is the answer channel: the model returns the sheet as the arguments of the
+ * schema tool, not as prose. And the answer may come in a second phase: a model that is fond of
+ * tools explores the picture and answers afterwards, under a schema the API holds it to.
  *
  * @depends openai/responses, openai/fallback, model/profiles, agent/documentation
  * @usedBy shared/pipeline, stages
@@ -146,13 +147,14 @@ export function createRoleRunner({ client, config = {}, model = null, effort = n
      * Run one role.
      * @param {string} name role name
      * @param {{ text: string, parts?: object[], instructions?: string|null, schema?: object|null,
-     *   schemaName?: string|null, maxTurns?: number, model?: string|null, effort?: string|null,
+     *   schemaName?: string|null, schemaMode?: 'auto'|'tool'|'separate', maxTurns?: number,
+     *   model?: string|null, effort?: string|null,
      *   signal?: AbortSignal|null, extraTools?: object[], withDocumentation?: boolean }} [params]
      * @returns {Promise<{ status: string, data: object|null, text: string, toolCalls: object[], usage: object|null, error: string|null, model: string|null, trace: object[] }>}
      */
     async function run(name, {
         text = '', parts = [], instructions = null, schema = null, schemaName = null,
-        maxTurns = 1, model: runModel = null, effort: runEffort = null,
+        schemaMode = 'auto', maxTurns = 1, model: runModel = null, effort: runEffort = null,
         signal = null, extraTools = null, withDocumentation = true,
     } = {}) {
         const role = resolveRole(config, name, { model: runModel ?? model, effort: runEffort ?? effort });
@@ -166,6 +168,17 @@ export function createRoleRunner({ client, config = {}, model = null, effort = n
         );
         const schemaTool = schema ? (schemaName ?? 'response') : null;
 
+        // Where the schema travels.
+        //
+        // `tool` puts the schema among the tools: the model answers by calling it. `separate`
+        // splits the work in two: the model explores with the tools first, and answers in a
+        // second call where the API holds it to the schema. The second way is the safer one for
+        // a tool-happy model: a schema among the tools is one more reason to keep looking, and
+        // the model may spend the whole budget on it without ever answering.
+        const mode = !schema
+            ? 'plain'
+            : (schemaMode === 'auto' ? (tools?.length ? 'separate' : 'tool') : schemaMode);
+
         const baseInstructions = [
             instructions ?? role.instructions,
             docs,
@@ -178,7 +191,15 @@ export function createRoleRunner({ client, config = {}, model = null, effort = n
             };
         }
 
-        const roleInstructions = baseInstructions;
+        // What the model is told about the answer, per mode.
+        const answerNote = mode === 'tool'
+            ? `Answer by calling the ${schemaTool} tool exactly once, with the complete answer; do not answer in prose.`
+            : mode === 'separate'
+                ? 'Measure with the tools. When you have what you need, stop calling tools and report in prose what you '
+                    + 'measured: every box with its numbers, every colour you sampled, the type and the spacing steps. '
+                    + 'The harness writes the sheet from your report, so report only the numbers you actually read.'
+                : '';
+        const roleInstructions = answerNote ? `${baseInstructions}\n\n${answerNote}` : baseInstructions;
 
         const trace = [];
         const userInput = userMessage(text, parts);
@@ -189,6 +210,7 @@ export function createRoleRunner({ client, config = {}, model = null, effort = n
         const runOnce = async (usedModel) => {
             const items = [];
             let answer = null;
+            let prose = '';
             const turns = Math.max(1, Number.isSafeInteger(maxTurns) ? maxTurns : 1);
             for (let turn = 0; turn < turns; turn++) {
                 // The model has to know how much budget is left: a model that does not know it
@@ -196,7 +218,7 @@ export function createRoleRunner({ client, config = {}, model = null, effort = n
                 const note = turn === 0 ? '' : [
                     '',
                     `Turn ${turn + 1} of ${turns}.`,
-                    schemaTool
+                    mode === 'tool'
                         ? `Call the ${schemaTool} tool with the complete answer as soon as you have what you need.`
                         : 'Answer as soon as you have what you need.',
                     'A measured part and a null are worth more than another look.',
@@ -206,19 +228,20 @@ export function createRoleRunner({ client, config = {}, model = null, effort = n
                     instructions: note ? `${roleInstructions}${note}` : roleInstructions,
                     input: turn === 0 ? userInput : [...userInput, ...items],
                     tools,
-                    schema,
+                    schema: mode === 'tool' ? schema : null,
                     schemaName: schemaTool ?? 'response',
                     effort: role.effort,
                     signal,
                     onEvent,
                 });
-                const parsed = parseResponse(answer, { schemaName: schemaTool });
+                const parsed = parseResponse(answer, { schemaName: mode === 'tool' ? schemaTool : null });
                 last = parsed;
                 for (const call of parsed.toolCalls) trace.push({ tool: call.name, args: call.arguments });
 
                 // The schema call is the answer: the sheet is in its arguments.
                 if (parsed.schemaAnswer) return parsed;
 
+                prose = parsed.text ?? '';
                 if (!parsed.toolCalls.length || !toolset) break;
 
                 // Run the calls and feed the results back to the model.
@@ -239,7 +262,36 @@ export function createRoleRunner({ client, config = {}, model = null, effort = n
                 }
             }
 
-            return last;
+            if (mode !== 'separate' || !schema) return last;
+
+            // --- the second phase: the answer, under the schema ----------------------
+            const ask = [
+                'You have finished looking at the reference.',
+                'Write the measurement sheet now, from the measurements you collected with the tools.',
+                'Do not call any tool. Leave a value null when you did not measure it.',
+            ].join(' ');
+            const found = textOf(prose).trim()
+                ? `\n\nHere is what you have found so far:\n${textOf(prose).trim().slice(0, 8000)}`
+                : '';
+            answer = await client.responses.create({
+                model: usedModel,
+                instructions: `${baseInstructions}\n\n${ask}`,
+                input: [
+                    ...userInput,
+                    ...items,
+                    { role: 'user', content: [textPart(`${ask}${found}`)] },
+                ],
+                tools: null,
+                schema,
+                schemaName: schemaTool ?? 'response',
+                schemaChannel: 'format',
+                effort: role.effort,
+                signal,
+                onEvent,
+            });
+            const parsed = parseResponse(answer, { schemaName: null });
+            last = parsed;
+            return parsed;
         };
 
         let usedModel = role.model;

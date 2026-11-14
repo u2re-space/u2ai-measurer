@@ -121,7 +121,7 @@ export const defaults = {
     /** 1 = one overview sheet; 2 = whole reference, then staged fragments. */
     measurerPasses: 1,
     /** Total tool turns for the measurement passes. */
-    measurerMaxTurns: 8,
+    measurerMaxTurns: 16,
     /** Context budget of the measurer: a word level or bytes. */
     measurerMaxContextBytes: 'large',
     /** Cap of automatic crops per measurement sheet; 0 lifts the cap. */
@@ -142,7 +142,7 @@ export const defaults = {
     measure: {
       enabled: true,
       /** Max agent turns for the overview pass. */
-      maxTurns: 8,
+      maxTurns: 16,
       /** Max agent turns for the fragment pass. */
       maxFragmentTurns: 8,
     },
