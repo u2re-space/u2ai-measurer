@@ -207,6 +207,13 @@
 - [x] `src/config/constants.js` — новые источники в `documentationSources`
 - [x] `src/config/defaults.js` — `cssColors` и `cssDisplay` в ролях
 
+### step-21 — Скиллы
+- [x] `src/agent/skills.js` — папка-пак (`SKILL.md` + ссылки), frontmatter (`name`,
+      `description`, `roles`), файлы и папки рядом
+- [x] `src/shared/pipeline.js` — паки мерителя наследуются фрагментным проходом
+- [x] `src/cli.js` — команда `skills` показывает состав пака
+- [x] `test/skills.test.js`
+
 ---
 
 ## 2. Правила работы

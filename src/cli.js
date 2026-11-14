@@ -287,7 +287,10 @@ async function commandSkills(config) {
         console.log('No skill packs found. Put markdown files into ~/.ai-measure/skills.');
         return EXIT.ok;
     }
-    for (const pack of packs) console.log(`  ${pack.name}.md — ${pack.bytes} bytes`);
+    for (const pack of packs) {
+        const files = pack.files?.length ? ` (${pack.files.join(', ')})` : '';
+        console.log(`  ${pack.name} — ${pack.bytes} bytes${files}`);
+    }
     return EXIT.ok;
 }
 

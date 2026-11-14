@@ -126,15 +126,21 @@ export async function runPipeline({
     const warnings = [...referenceWarnings];
 
     // The skill packs of the roles that run here.
-    const skills = {};
-    for (const role of ['measurer', 'measurerFragment', 'designer']) {
-        const packs = await loadSkills({ dir: config?.skills?.dir ?? null, role });
-        if (packs.length) {
-            skills[role] = packs
-                .map((pack) => `## Skill pack: ${pack.name}\n${pack.content.trim()}`)
-                .join('\n\n');
-        }
-    }
+    //
+    // The fragment pass is the measurer working on a piece of the picture: it inherits the
+    // packs of the measurer and may add its own.
+    const skillDir = config?.skills?.dir ?? null;
+    const packText = (packs) => (packs.length
+        ? packs.map((pack) => `## Skill pack: ${pack.name}\n${pack.content.trim()}`).join('\n\n')
+        : '');
+    const measurerPacks = await loadSkills({ dir: skillDir, role: 'measurer' });
+    const fragmentPacks = await loadSkills({ dir: skillDir, role: 'measurerFragment' });
+    const designerPacks = await loadSkills({ dir: skillDir, role: 'designer' });
+    const skills = {
+        measurer: packText(measurerPacks),
+        measurerFragment: packText([...measurerPacks, ...fragmentPacks]),
+        designer: packText(designerPacks),
+    };
 
     const mcp = dryRun ? [] : await connectMcpServers(config?.mcp?.servers ?? []);
 
