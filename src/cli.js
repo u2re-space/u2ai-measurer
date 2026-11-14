@@ -380,7 +380,7 @@ export async function main(argv = process.argv.slice(2)) {
     // The design stage is the whole of the `design` command; `measure` runs the whole pipeline.
     const stages = opts.command === 'design'
         ? ['design']
-        : (opts.stages.length ? opts.stages.map((stage) => (stage === 'crop' ? 'measure' : stage)) : null);
+        : (opts.stages.length ? opts.stages : null);
 
     try {
         const client = await createClient({

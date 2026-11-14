@@ -168,3 +168,6 @@ package-lock.json
 .dbg-*
 .debug-*
 test/*.png
+
+# The default output directory of a run
+measurements/

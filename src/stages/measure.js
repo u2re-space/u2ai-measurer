@@ -11,7 +11,7 @@
  * @depends node:path, node:fs/promises, image/sharp, openai/responses, roles/index,
  *          stages/crop, agent/schemas
  * @usedBy shared/pipeline
- * @exports runMeasureStage, shouldMeasure, attachReference, attachmentBlock, splitReferences
+ * @exports runMeasureStage, shouldMeasure
  * @ai.tags stage, measure, vision
  * @ai.hint io
  * @ai.hint legacy-0.2
@@ -19,72 +19,9 @@
 
 import path from 'node:path';
 import { readFile } from 'node:fs/promises';
-import { modelBytes } from '../image/sharp.js';
-import { imagePart, textPart } from '../openai/responses.js';
 import { MEASUREMENT_SCHEMA } from '../agent/schemas.js';
 import { stageMeasurementCrops } from './crop.js';
-
-/**
- * Read a reference picture and turn it into an input part the model can see.
- *
- * The picture is downscaled to the configured longest edge: the model reads the layout, and a
- * 4K screenshot costs a lot of tokens for nothing.
- * @param {{ root: string, rel: string, config?: object }} options
- * @returns {Promise<{ part: object, width: number, height: number }|null>}
- * @exports
- * @ai.hint io
- */
-export async function attachReference({ root, rel, config = {} }) {
-    const abs = path.resolve(root, rel);
-    const image = await modelBytes(abs, {
-        maxSide: Number.isSafeInteger(config?.image?.maxSide) ? config.image.maxSide : 1536,
-        format: config?.image?.format === 'jpeg' ? 'jpeg' : 'png',
-        quality: Number.isSafeInteger(config?.image?.jpegQuality) ? config.image.jpegQuality : 90,
-    }).catch(() => null);
-    if (!image) return null;
-    return {
-        part: imagePart(image.bytes, image.mime),
-        width: image.width,
-        height: image.height,
-    };
-}
-
-/**
- * The text that tells the model which picture is which.
- *
- * The caption is the only identity of a picture: the model must not count pictures or guess by
- * their position.
- * @param {Array<{ rel: string, role: string }>} attachments
- * @returns {string}
- * @exports
- * @ai.hint pure
- */
-export function attachmentBlock(attachments = []) {
-    return attachments
-        .map((item, index) => `Attached image ${index + 1}: ${item.rel} (${item.role})`)
-        .join('\n');
-}
-
-/**
- * The references of a run: the sub-references first, then the originals.
- *
- * The originals that produced a sub-reference are context only: they are not attached, because a
- * tilted picture would invite numbers that belong to no screen.
- * @param {object[]} references
- * @returns {{ attached: object[], context: object[] }}
- * @ai.hint pure
- */
-export function splitReferences(references = []) {
-    const subrefs = references.filter((item) => item?.kind === 'subref');
-    const originals = references.filter((item) => item?.kind === 'original');
-    const covered = new Set();
-    for (const sub of subrefs) {
-        const source = String(sub.source ?? '').trim();
-        if (source) covered.add(path.basename(source));
-    }
-    const context = originals.filter((item) => !covered.has(path.basename(item.rel)));
-    return { attached: [...subrefs, ...context], context: originals };
-}
+import { attachReference, attachmentBlock, splitReferences } from './references.js';
 
 /**
  * Whether the measurement stage runs.
@@ -118,6 +55,7 @@ export async function runMeasureStage({
     runner,
     toolset = null,
     references = [],
+    skipCrops = false,
     notify = null,
     signal = null,
 }) {
@@ -201,7 +139,7 @@ export async function runMeasureStage({
 
     // --- the fragments ---------------------------------------------------------
     let crops = [];
-    if (config?.stages?.crop?.autoCrops !== false) {
+    if (!skipCrops) {
         const staged = await stageMeasurementCrops({
             root,
             workId,
@@ -265,7 +203,7 @@ export async function runMeasureStage({
     }
 
     // --- the final crops ------------------------------------------------------
-    if (config?.stages?.crop?.autoCrops !== false) {
+    if (!skipCrops) {
         const staged = await stageMeasurementCrops({
             root,
             workId,

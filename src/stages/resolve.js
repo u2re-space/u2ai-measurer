@@ -26,7 +26,7 @@
 
 import path from 'node:path';
 import { cp, mkdir, writeFile } from 'node:fs/promises';
-import { cropSlug } from './crop.js';
+import { cropSlug } from './artifacts.js';
 import { toPosix } from '../agent/paths.js';
 
 /** The names of the artifacts, inside the output directory. */

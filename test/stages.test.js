@@ -21,7 +21,11 @@ import { runPipeline } from '../src/shared/pipeline.js';
 import { createClient } from '../src/openai/client.js';
 import { cloneDefaults } from '../src/config/defaults.js';
 import { stageMeasurementCrops, measurementConclusion } from '../src/stages/crop.js';
-import { runMeasureStage, shouldMeasure, splitReferences } from '../src/stages/measure.js';
+import { runMeasureStage, shouldMeasure } from '../src/stages/measure.js';
+import { runSegmentStage } from '../src/stages/segmentate.js';
+import { runCropStage } from '../src/stages/cropper.js';
+import { writeStageFile } from '../src/stages/artifacts.js';
+import { splitReferences } from '../src/stages/references.js';
 import { runDesignStage, shouldRunDesign, readDesignMd, clipMiddle } from '../src/stages/design.js';
 import { runResolve, buildPalette, buildTokens, buildDesignMd, buildReport } from '../src/stages/resolve.js';
 import { STAGE_IDS, stageById } from '../src/stages/index.js';
@@ -66,6 +70,28 @@ const SHEET = {
         how: 'cut', use: 'logo', source: 'picture.png', crop: null,
     }],
     rules: [{ name: 'space-2', value: 8, unit: 'px', css: '--space-2: 0.5rem', from: 'card padding' }],
+};
+
+/** A segmentation with three zones: an asset, a detail and a zone that is not cut. */
+const SEGMENTATION = {
+    summary: 'A small mockup.',
+    source: 'picture.png',
+    canvas: { x: 0, y: 0, width: 100, height: 80 },
+    zones: [
+        {
+            name: 'badge', kind: 'image', box: { x: 10, y: 10, width: 20, height: 20 },
+            role: 'card', use: 'artwork', crop: 'asset', hasText: false, notes: '',
+        },
+        {
+            name: 'caption', kind: 'text', box: { x: 40, y: 10, width: 30, height: 10 },
+            role: 'label', use: 'text block', crop: 'detail', hasText: true, notes: '',
+        },
+        {
+            name: 'page', kind: 'background', box: { x: 0, y: 0, width: 100, height: 80 },
+            role: 'page', use: '', crop: 'none', hasText: false, notes: '',
+        },
+    ],
+    notes: '',
 };
 
 /** A design direction in the shape the designer answers in. */
@@ -169,9 +195,10 @@ function fakeRunner(sheet) {
     };
 }
 
-test('the registry holds the three stages of the pipeline', () => {
-    assert.deepEqual([...STAGE_IDS], ['design', 'measure', 'resolve']);
+test('the registry holds the stages of the pipeline', () => {
+    assert.deepEqual([...STAGE_IDS], ['design', 'segmentate', 'crop', 'measure', 'resolve']);
     assert.equal(stageById('measure').role, 'measurer');
+    assert.equal(stageById('segmentate').role, 'segmentator');
     assert.equal(stageById('resolve').role, null);
     assert.equal(stageById('nothing'), null);
 });
@@ -313,6 +340,85 @@ test('the measurement mode decides whether the stage runs', () => {
     assert.equal(shouldMeasure({ agent: { measure: 'always' } }, { hasReferences: false }), true);
     assert.equal(shouldMeasure({ agent: { measure: 'auto' } }, { hasReferences: true }), true);
     assert.equal(shouldMeasure({ agent: { measure: 'auto' } }, { hasReferences: false }), false);
+});
+
+test('the segmentation stage writes the zones of the reference', async () => {
+    const { root, cleanup } = await workspace();
+    try {
+        const outDir = path.join(root, 'measurements');
+        const runner = fakeRunner(SEGMENTATION);
+        const result = await runSegmentStage({
+            root,
+            workId: 'w1',
+            config: cloneDefaults(),
+            runner,
+            references: [{ kind: 'original', rel: 'picture.png' }],
+            outDir,
+        });
+        assert.deepEqual(result.warnings, []);
+        assert.equal(result.segmentation.sources.length, 1);
+        assert.equal(result.segmentation.sources[0].zones.length, 3);
+        const file = path.join(outDir, 'stages', 'segmentation.json');
+        assert.ok(await stat(file).then((info) => info.isFile()));
+        const written = JSON.parse(await readFile(file, 'utf-8'));
+        assert.equal(written.stage, 'segmentate');
+        assert.equal(written.sources[0].source, 'picture.png');
+    } finally {
+        await cleanup();
+    }
+});
+
+test('the crop stage cuts the fragments the segmentation named', async () => {
+    const { root, cleanup } = await workspace();
+    try {
+        const outDir = path.join(root, 'measurements');
+        await writeStageFile(outDir, 'segmentation', {
+            generatedBy: 'ai-measure',
+            stage: 'segmentate',
+            sources: [{
+                source: 'picture.png',
+                canvas: { x: 0, y: 0, width: 100, height: 80 },
+                scale: 1,
+                zones: SEGMENTATION.zones,
+            }],
+        });
+        const runner = fakeRunner(null);
+        const result = await runCropStage({
+            root,
+            workId: 'w1',
+            config: cloneDefaults(),
+            runner,
+            references: [{ kind: 'original', rel: 'picture.png' }],
+            outDir,
+        });
+        // The zone that is marked "none" is not cut.
+        assert.equal(result.crops.length, 2);
+        assert.equal(result.crops[0].crop, 'crops/01-asset-badge.png');
+        assert.equal(result.crops[1].crop, 'crops/02-detail-caption.png');
+        assert.ok(await stat(path.join(outDir, 'crops', '01-asset-badge.png')).then((info) => info.isFile()));
+        const written = JSON.parse(await readFile(path.join(outDir, 'stages', 'crops.json'), 'utf-8'));
+        assert.equal(written.crops.length, 2);
+    } finally {
+        await cleanup();
+    }
+});
+
+test('the crop stage without a segmentation says so', async () => {
+    const { root, cleanup } = await workspace();
+    try {
+        const result = await runCropStage({
+            root,
+            workId: 'w1',
+            config: cloneDefaults(),
+            runner: fakeRunner(null),
+            references: [{ kind: 'original', rel: 'picture.png' }],
+            outDir: path.join(root, 'measurements'),
+        });
+        assert.equal(result.crops.length, 0);
+        assert.match(result.warnings[0], /segmentate/i);
+    } finally {
+        await cleanup();
+    }
 });
 
 test('the sub-references come first and the originals they cover stay out of the context', () => {
@@ -511,9 +617,13 @@ test('the pipeline writes the artifacts and the crops of a real run', async () =
         // The crops are cut into the work directory.
         const crops = await stat(path.join(root, '.tmp', result.workId, 'crops')).then((info) => info.isDirectory());
         assert.ok(crops);
-        // The host was asked twice over the Responses route: the model explores with the
-        // tools, and answers in the second call under the schema.
-        assert.equal(host.calls.length, 2);
+        // The segmentation of the reference is written into the output directory.
+        const segmentation = JSON.parse(await readFile(path.join(root, 'measurements', 'stages', 'segmentation.json'), 'utf-8'));
+        assert.equal(segmentation.stage, 'segmentate');
+        assert.equal(segmentation.sources[0].source, 'picture.png');
+        // The host was asked four times over the Responses route: the segmentation and the
+        // measurement explore with the tools, and answer in the second call under the schema.
+        assert.equal(host.calls.length, 4);
         assert.match(host.calls[0].url, /\/v1\/responses$/);
         assert.ok(host.calls[0].body.input_text === undefined);
         assert.ok(host.calls[0].body.text === undefined, 'the first call carries no schema');
@@ -547,7 +657,7 @@ test('the pipeline answers with the plan when it is a dry run', async () => {
         assert.equal(host.calls.length, 0);
         const plan = events.find((event) => event.type === 'plan');
         assert.ok(plan);
-        assert.deepEqual(plan.stages.map((stage) => stage.id), ['measure', 'resolve']);
+        assert.deepEqual(plan.stages.map((stage) => stage.id), ['segmentate', 'crop', 'measure', 'resolve']);
         assert.match(plan.outputs[0], /measurements\.json$/);
     } finally {
         await cleanup();
@@ -573,7 +683,7 @@ test('the pipeline reports the stages that are switched off', async () => {
         });
         client.close();
         const plan = events.find((event) => event.type === 'plan');
-        assert.deepEqual(plan.stages.map((stage) => stage.id), ['resolve']);
+        assert.deepEqual(plan.stages.map((stage) => stage.id), ['segmentate', 'crop', 'resolve']);
     } finally {
         await cleanup();
         await host.close();

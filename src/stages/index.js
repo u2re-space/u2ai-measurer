@@ -13,6 +13,8 @@
 
 import { runDesignStage, shouldRunDesign } from './design.js';
 import { runMeasureStage, shouldMeasure } from './measure.js';
+import { runSegmentStage } from './segmentate.js';
+import { runCropStage } from './cropper.js';
 import { measurementConclusion } from './crop.js';
 import { runResolve, MEASUREMENTS_FILE } from './resolve.js';
 
@@ -54,26 +56,76 @@ async function measureStage(state, notify) {
         runner: state.roles,
         toolset: state.toolset,
         references: state.references,
+        // The crop stage cuts the fragments of the segmentation; when it ran, the old sheet
+        // does not cut them a second time.
+        skipCrops: (state.crops?.length ?? 0) > 0,
         notify,
         signal: state.signal ?? null,
     });
     state.sheet = result.sheet;
-    state.crops = result.crops;
+    // The fragments of the crop stage stay when the old sheet cut none of its own.
+    state.crops = result.crops.length ? result.crops : (state.crops ?? []);
     state.conclusion = result.conclusion ?? measurementConclusion(result.sheet, result.crops);
+    state.warnings.push(...result.warnings);
+}
+
+/**
+ * The segmentation stage: the zones of the references and the box of each one.
+ * @param {object} state the pipeline state
+ * @param {Function} notify event callback
+ * @returns {Promise<void>}
+ * @ai.hint io
+ */
+async function segmentateStage(state, notify) {
+    const result = await runSegmentStage({
+        root: state.root,
+        workId: state.workId,
+        config: state.config,
+        runner: state.roles,
+        references: state.references,
+        outDir: state.outDir,
+        notify,
+        signal: state.signal ?? null,
+    });
+    state.segmentation = result.segmentation;
+    state.warnings.push(...result.warnings);
+}
+
+/**
+ * The crop stage: the fragments of the references, cut into files.
+ * @param {object} state the pipeline state
+ * @param {Function} notify event callback
+ * @returns {Promise<void>}
+ * @ai.hint io
+ */
+async function cropStage(state, notify) {
+    const result = await runCropStage({
+        root: state.root,
+        workId: state.workId,
+        config: state.config,
+        runner: state.roles,
+        references: state.references,
+        outDir: state.outDir,
+        notify,
+        signal: state.signal ?? null,
+    });
+    state.crops = result.crops;
     state.warnings.push(...result.warnings);
 }
 
 /**
  * The stages of the pipeline, in the order they run.
  *
- * The order is fixed: a stage may only read what the earlier stages wrote. The crop stage is
- * not one of them — the crops are cut inside the measurement stage, right after the overview
- * pass and once more after the fragment pass.
+ * The order is fixed: a stage may only read what the earlier stages wrote. Every stage leaves
+ * its file in the output directory, so a stage may also run alone, on the files of the previous
+ * run.
  *
  * @type {ReadonlyArray<{ id: string, label: string, role: string|null, run: Function, dir: string }>}
  */
 export const STAGE_DEFS = Object.freeze([
     { id: 'design', label: 'Design direction', role: 'designer', run: designStage, dir: 'design-assets' },
+    { id: 'segmentate', label: 'Segment the reference', role: 'segmentator', run: segmentateStage, dir: 'stages' },
+    { id: 'crop', label: 'Cut the fragments', role: 'cropper', run: cropStage, dir: 'crops' },
     { id: 'measure', label: 'Measure the reference', role: 'measurer', run: measureStage, dir: 'crops' },
     { id: 'resolve', label: 'Write the artifacts', role: null, run: runResolve, dir: MEASUREMENTS_FILE },
 ]);

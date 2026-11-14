@@ -116,6 +116,13 @@ function linesOf(e, { verbose = false } = {}) {
                 text: `  crop: ${crop.crop} — ${crop.kind} "${crop.name}"`,
                 level: 'log',
             }));
+        case 'segment.zones':
+            return [{ text: `  zones: ${e.zones ?? 0} in ${e.source ?? ''}`, level: 'log' }];
+        case 'crop.done':
+            return (e.crops ?? []).map((crop) => ({
+                text: `  fragment: ${crop.crop} — ${crop.kind} "${crop.name}"`,
+                level: 'log',
+            }));
         case 'artifact':
             return [{
                 text: `  written: ${e.file} (${Math.round((e.bytes ?? 0) / 1024)} kB)`,

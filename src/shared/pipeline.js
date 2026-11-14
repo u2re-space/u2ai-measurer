@@ -120,7 +120,9 @@ export async function runPipeline({
 }) {
     const id = workId ?? newWorkId();
     const workDir = path.join(root, '.tmp', id);
-    const outputDir = outDir ?? config?.output?.dir ?? './measurements';
+    // The output directory is absolute: the stages write their files into it, and a relative
+    // path would be relative to the process, not to the working directory of the run.
+    const outputDir = path.resolve(root, outDir ?? config?.output?.dir ?? './measurements');
 
     const { references, warnings: referenceWarnings } = await stageReferences({ root, workId: id, images });
     const warnings = [...referenceWarnings];
@@ -201,7 +203,8 @@ export async function runPipeline({
             }),
             outputs: [
                 toPosix(path.join(outputDir, MEASUREMENTS_FILE)),
-                toPosix(path.join('.tmp', id, 'crops')),
+                toPosix(path.join(outputDir, 'stages')),
+                toPosix(path.join(outputDir, 'crops')),
             ],
         });
         return { output: null, warnings, failed: false, workId: id, artifacts: [] };
@@ -224,6 +227,7 @@ export async function runPipeline({
         toolset,
         references,
         design: null,
+        segmentation: null,
         sheet: null,
         crops: [],
         conclusion: null,

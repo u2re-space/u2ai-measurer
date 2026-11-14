@@ -22,28 +22,11 @@ import path from 'node:path';
 import { stat } from 'node:fs/promises';
 import { rasterCrop, rasterInfo } from '../image/sharp.js';
 import { clampRect } from '../image/crop.js';
+import { cropSlug } from './artifacts.js';
 import { resolveInside } from '../agent/paths.js';
 
 /** The upper bound of the automatic crops of one sheet. `maxCrops: 0` lifts the cap. */
 export const MAX_CROPS = 192;
-
-/**
- * A filesystem-safe short name for a crop file.
- * @param {string} value
- * @param {string} fallback
- * @returns {string}
- * @exports
- * @ai.hint pure
- */
-export function cropSlug(value, fallback = 'crop') {
-    const base = String(value ?? '')
-        .normalize('NFKD')
-        .replace(/[\u0300-\u036f]/g, '')
-        .replace(/[^a-zA-Z0-9]+/g, '-')
-        .replace(/^-+|-+$/g, '')
-        .toLowerCase();
-    return (base || fallback).slice(0, 48);
-}
 
 /**
  * True when a file exists inside the working directory.

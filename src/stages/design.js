@@ -23,7 +23,7 @@
 import path from 'node:path';
 import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { DESIGN_SCHEMA } from '../agent/schemas.js';
-import { attachReference, attachmentBlock } from './measure.js';
+import { attachReference, attachmentBlock } from './references.js';
 
 /** How much of the `DESIGN.md` is put into the prompt. */
 export const DESIGN_MD_MAX_BYTES = 16 * 1024;
