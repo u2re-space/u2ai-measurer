@@ -117,6 +117,21 @@ of one request. It has to outlive the longest thinking of the model: a timeout c
 and the answer is lost, so the default is generous. A request that fails is retried, and the retry
 is printed too.
 
+### What the run reads and writes
+
+The log of a run says what happens, not only that something happens:
+
+| Line | What it means |
+|------|---------------|
+| `reference: landing.png (original)` | The picture the measurer reads. |
+| `tool: sample_colors path=landing.png x=10 y=20 width=30 height=40` | The call the model made, with its arguments. |
+| `colours: #aabbcc 62.5%  #112233 37.5%` | What the tool found: the colours and their share of the area. |
+| `crop: .tmp/<id>/crops/01-bishop.png — artwork "bishop"` | The fragment that was cut out of the reference. |
+| `sheet: 12 elements, 3 regions, 5 rules` | The shape of the sheet the model returned. |
+| `written: measurements/measurements.json (12 kB)` | The file of the delivery. |
+
+`--verbose` prints the whole answer of every tool instead of the short summary.
+
 ### Exit codes
 
 | Code | Meaning |

@@ -264,6 +264,17 @@
 - [x] README (EN), planned.md (RU)
 - [x] Проверка: `npm test` — 146 тестов, все проходят
 
+### step-c9 — Лог говорит, что читается, что пишется и какие цвета сняты
+- [x] `src/shared/pipeline.js` — событие `references`: картинки, которые читает прогон
+- [x] `src/roles/index.js` — события `tool.call` (с аргументами) и `tool.result` (с ответом)
+- [x] `src/stages/measure.js` — события `measure.sheet` (элементы, регионы, правила, цвета)
+      и `measure.crops` (нарезанные фрагменты)
+- [x] `src/stages/resolve.js` — событие `artifact`: каждый записанный файл и его размер
+- [x] `src/cli/renderer.js` — строки по всем этим событиям; `--verbose` печатает ответ целиком
+- [x] `test/renderer.test.js` — 7 тестов на строки рендерера
+- [x] README (EN), planned.md (RU)
+- [x] Проверка: `npm test` — 153 теста, все проходят
+
 ---
 
 ## 2. Правила работы

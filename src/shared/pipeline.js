@@ -124,6 +124,11 @@ export async function runPipeline({
 
     const { references, warnings: referenceWarnings } = await stageReferences({ root, workId: id, images });
     const warnings = [...referenceWarnings];
+    // The references are what the run reads: the reader sees them before the model does.
+    notify({
+        type: 'references',
+        items: references.map((item) => ({ path: item.rel, kind: item.kind })),
+    });
 
     // The skill packs of the roles that run here.
     //

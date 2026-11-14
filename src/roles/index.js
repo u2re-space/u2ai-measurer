@@ -256,6 +256,14 @@ export function createRoleRunner({ client, config = {}, model = null, effort = n
                     } catch (error) {
                         output = `Tool error: ${error?.message ?? error}`;
                     }
+                    // The answer of the tool says what was read or written: the picture, the
+                    // colours, the file. The reader has to see it, not only the model.
+                    onEvent?.({
+                        type: 'tool.result',
+                        name: call.name,
+                        output: textOf(output).slice(0, 4000),
+                        error: output.startsWith('Tool error:'),
+                    });
                     items.push({ type: 'function_call', call_id: callId, name: call.name, arguments: call.raw });
                     items.push({
                         type: 'function_call_output',

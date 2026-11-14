@@ -35,6 +35,44 @@ function printPlan(event) {
 }
 
 /**
+ * The short answer of a tool: what it read, what it wrote, what it sampled.
+ *
+ * The model sees the whole answer; the reader sees the shape of it — the path of the
+ * picture, the colours with their share, the number of the lines of a file.
+ * @param {string} name the name of the tool
+ * @param {string} output the answer of the tool
+ * @returns {string[]}
+ * @ai.hint pure
+ */
+function toolSummary(name, output) {
+    const text = String(output ?? '').trim();
+    if (!text) return [];
+    const lines = text.split('\n');
+    if (name === 'sample_colors') {
+        const colours = [...text.matchAll(/^\s*\d+\.\s+(#[0-9a-fA-F]{3,8})\b.*?share:\s*([\d.]+)%/gm)]
+            .map((match) => `${match[1].toLowerCase()} ${match[2]}%`);
+        const plate = text.match(/^\s*plate:\s*(\S+)/m)?.[1] ?? '';
+        const contrast = text.match(/^\s*contrast plate vs the most different colour:\s*([\d.]+):1/m)?.[1] ?? '';
+        return [
+            lines[0].trim(),
+            colours.length ? `colours: ${colours.join('  ')}` : null,
+            plate ? `plate: ${plate}${contrast ? `, contrast ${contrast}:1` : ''}` : null,
+        ].filter(Boolean);
+    }
+    if (name === 'list_files') {
+        const files = lines.filter(Boolean);
+        return [`${files.length} file(s)`, ...files.slice(0, 10).map((file) => `  ${file}`)];
+    }
+    if (name === 'read_file') {
+        return [
+            `${lines.length} line(s), ${text.length} chars`,
+            ...lines.slice(0, 5).map((line) => `  ${line.slice(0, 120)}`),
+        ];
+    }
+    return lines.slice(0, 3).map((line) => line.slice(0, 160));
+}
+
+/**
  * The lines every renderer shares.
  * @param {object} e the event
  * @param {{ verbose?: boolean }} options
@@ -45,6 +83,11 @@ function linesOf(e, { verbose = false } = {}) {
     switch (e.type) {
         case 'plan':
             return [];
+        case 'references':
+            return (e.items ?? []).map((item) => ({
+                text: `  reference: ${item.path} (${item.kind})`,
+                level: 'log',
+            }));
         case 'stage.start':
             return [{ text: `[${e.stage}] ${e.label ?? e.stage}`, level: 'log' }];
         case 'stage.done':
@@ -53,6 +96,31 @@ function linesOf(e, { verbose = false } = {}) {
             return [{ text: `[${e.stage}] failed: ${e.error}`, level: 'error' }];
         case 'measure.pass':
             return [{ text: `  pass ${e.pass} of ${e.of}`, level: 'log' }];
+        case 'measure.sheet': {
+            const canvas = e.canvas?.width && e.canvas?.height ? `, canvas ${e.canvas.width}×${e.canvas.height}` : '';
+            const lines = [{
+                text: `  sheet: ${e.elements ?? 0} elements, ${e.regions ?? 0} regions, ${e.rules ?? 0} rules${canvas}`,
+                level: 'log',
+            }];
+            for (const colour of e.colors ?? []) {
+                const share = Number.isFinite(colour.share) ? ` ${(colour.share * 100).toFixed(1)}%` : '';
+                lines.push({
+                    text: `  colour: ${colour.name || '—'} ${colour.hex || '—'}${share} ${colour.method || ''}${colour.confidence ? ` (${colour.confidence})` : ''}`,
+                    level: 'log',
+                });
+            }
+            return lines;
+        }
+        case 'measure.crops':
+            return (e.crops ?? []).map((crop) => ({
+                text: `  crop: ${crop.crop} — ${crop.kind} "${crop.name}"`,
+                level: 'log',
+            }));
+        case 'artifact':
+            return [{
+                text: `  written: ${e.file} (${Math.round((e.bytes ?? 0) / 1024)} kB)`,
+                level: 'log',
+            }];
         case 'design.start':
             return [{ text: `  references: ${e.references ?? 0}${e.designMd ? ', DESIGN.md read' : ''}`, level: 'log' }];
         case 'design.done':
@@ -79,8 +147,23 @@ function linesOf(e, { verbose = false } = {}) {
                 text: `  request failed${e.status ? ` (${e.status})` : ''}: ${e.error ?? ''}`,
                 level: 'warn',
             }];
-        case 'tool.call':
-            return [{ text: `  tool: ${e.name ?? ''}`, level: 'log' }];
+        case 'tool.call': {
+            const args = e.arguments && typeof e.arguments === 'object' ? e.arguments : {};
+            const detail = Object.entries(args)
+                .filter(([, value]) => value !== undefined && value !== null && value !== '')
+                .map(([key, value]) => `${key}=${typeof value === 'object' ? JSON.stringify(value) : String(value)}`)
+                .join(' ');
+            return [{ text: `  tool: ${e.name ?? ''}${detail ? ` ${detail}` : ''}`, level: 'log' }];
+        }
+        case 'tool.result': {
+            if (verbose) {
+                return String(e.output ?? '')
+                    .split('\n')
+                    .slice(0, 12)
+                    .map((line) => ({ text: `    ${line}`, level: 'log' }));
+            }
+            return toolSummary(e.name ?? '', e.output ?? '').map((line) => ({ text: `    ${line}`, level: 'log' }));
+        }
         case 'request.start':
             return verbose ? [{ text: `  [request] ${e.backend ?? ''} ${e.path ?? ''}`, level: 'log' }] : [];
         case 'api':

@@ -413,6 +413,12 @@ export async function runResolve(state, notify = () => {}) {
         try {
             await writeFile(target3, file.content, 'utf-8');
             written.push(toPosix(path.relative(root, target3)));
+            // Every file of the delivery is named as it is written.
+            notify({
+                type: 'artifact',
+                file: toPosix(path.relative(root, target3)),
+                bytes: Buffer.byteLength(file.content, 'utf-8'),
+            });
         } catch (error) {
             state.warnings?.push(`resolve: ${file.name} was not written (${error?.message ?? error})`);
         }

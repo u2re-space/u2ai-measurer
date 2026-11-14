@@ -239,6 +239,31 @@ export async function runMeasureStage({
         }
     }
 
+    // --- the sheet --------------------------------------------------------------
+    // The sheet is what the model found: the reader sees its shape and its colours.
+    {
+        const elements = Array.isArray(sheet.elements) ? sheet.elements : [];
+        const regions = Array.isArray(sheet.regions) ? sheet.regions : [];
+        const rules = Array.isArray(sheet.rules) ? sheet.rules : [];
+        const palette = Array.isArray(sheet?.colors?.palette) ? sheet.colors.palette : [];
+        notify?.({
+            type: 'measure.sheet',
+            source: String(sheet.source ?? ''),
+            canvas: sheet.canvas ?? null,
+            elements: elements.length,
+            regions: regions.length,
+            rules: rules.length,
+            colors: palette.map((color) => ({
+                name: String(color?.name ?? ''),
+                hex: String(color?.hex ?? ''),
+                oklch: String(color?.oklch ?? ''),
+                share: Number.isFinite(color?.share) ? color.share : null,
+                method: String(color?.method ?? ''),
+                confidence: String(color?.confidence ?? ''),
+            })),
+        });
+    }
+
     // --- the final crops ------------------------------------------------------
     if (config?.stages?.crop?.autoCrops !== false) {
         const staged = await stageMeasurementCrops({
@@ -252,6 +277,18 @@ export async function runMeasureStage({
         });
         crops = staged.crops;
         warnings.push(...staged.warnings);
+    }
+
+    // The crops are files the run cut: the reader sees what is on the disk.
+    if (crops.length) {
+        notify?.({
+            type: 'measure.crops',
+            crops: crops.map((item) => ({
+                crop: String(item?.crop ?? ''),
+                kind: String(item?.kind ?? ''),
+                name: String(item?.name ?? ''),
+            })),
+        });
     }
 
     return {
