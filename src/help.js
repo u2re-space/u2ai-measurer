@@ -45,8 +45,9 @@ Commands:
 Options:
   -i, --image <path>    A reference picture. May be repeated.
   -o, --out <dir>       Where the artifacts go (default: ./measurements).
-      --stages <list>   The stages to run: design, measure, resolve. The crops are cut by
-                        the measure stage, so "crop" is an alias of "measure".
+      --stages <list>   The stages to run: segmentate, crop, measure, recognize, sample, resolve,
+                        design. Every stage may run alone; the work of a stage is written to the
+                        output directory, so the stage after it reads the file of the stage before.
   -m, --model <id>      The model of the roles.
       --effort <level>  The reasoning effort: low, medium, high, xhigh.
       --task <text>     The task the design direction answers.

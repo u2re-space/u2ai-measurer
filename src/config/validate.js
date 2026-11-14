@@ -91,16 +91,24 @@ function validateStage(id, section, fail) {
   for (const key of Object.keys(section)) {
     if (!(key in known)) fail(`${where}.${key}: неизвестное поле (допустимо: ${Object.keys(known).join(', ')})`);
   }
-  if (id === 'crop') {
-    if (typeof section.autoCrops !== 'boolean') fail(`${where}.autoCrops: true | false`);
+  // The stages that may work in two ways: the harness does the work, or the model does.
+  if ('mode' in known) {
+    if (!ENUMS.stageModes.includes(section.mode)) {
+      fail(`${where}.mode: ${ENUMS.stageModes.join(' | ')}`);
+    }
   }
-  if (id === 'measure') {
-    for (const key of ['maxTurns', 'maxFragmentTurns']) {
-      if (!(Number.isSafeInteger(section[key]) && section[key] > 0)) fail(`${where}.${key}: целое > 0`);
+  if ('maxTurns' in known) {
+    if (!(Number.isSafeInteger(section.maxTurns) && section.maxTurns > 0)) fail(`${where}.maxTurns: целое > 0`);
+  }
+  if ('maxCrops' in known) {
+    if (!(Number.isSafeInteger(section.maxCrops) && section.maxCrops >= 0)) fail(`${where}.maxCrops: целое >= 0`);
+  }
+  for (const key of ['localEffort', 'aiEffort']) {
+    if (key in known && !ENUMS.reasoningEfforts.includes(section[key])) {
+      fail(`${where}.${key}: ${ENUMS.reasoningEfforts.join(' | ')}`);
     }
   }
   if (id === 'design') {
-    if (!(Number.isSafeInteger(section.maxTurns) && section.maxTurns > 0)) fail(`${where}.maxTurns: целое > 0`);
     if (typeof section.template !== 'boolean') fail(`${where}.template: true | false`);
   }
   if (id === 'resolve') {

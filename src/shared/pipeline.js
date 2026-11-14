@@ -140,12 +140,14 @@ export async function runPipeline({
         : '');
     const measurerPacks = await loadSkills({ dir: skillDir, role: 'measurer' });
     const fragmentPacks = await loadSkills({ dir: skillDir, role: 'measurerFragment' });
-    const designerPacks = await loadSkills({ dir: skillDir, role: 'designer' });
     const skills = {
         measurer: packText(measurerPacks),
         measurerFragment: packText([...measurerPacks, ...fragmentPacks]),
-        designer: packText(designerPacks),
     };
+    // The other roles get their own packs; a role without a pack simply has none.
+    for (const name of ['segmentator', 'cropper', 'recognizer', 'sampler', 'resolver', 'designer']) {
+        skills[name] = packText(await loadSkills({ dir: skillDir, role: name }));
+    }
 
     const mcp = dryRun ? [] : await connectMcpServers(config?.mcp?.servers ?? []);
     for (const connection of mcp) {

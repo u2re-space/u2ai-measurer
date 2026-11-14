@@ -26,7 +26,9 @@ export const ENUMS = Object.freeze({
   imageQualities: Object.freeze(['low', 'medium', 'high', 'auto']),
   imageBackgrounds: Object.freeze(['auto', 'transparent', 'opaque']),
   /** Pipeline stages in execution order. */
-  stages: Object.freeze(['crop', 'measure', 'design', 'resolve']),
+  stages: Object.freeze(['segmentate', 'crop', 'measure', 'recognize', 'sample', 'resolve', 'design']),
+  /** How a stage may work: local (the harness does it) or ai (the model does it). */
+  stageModes: Object.freeze(['local', 'ai']),
   /** When the measurement stage runs. */
   measureModes: Object.freeze(['off', 'auto', 'always']),
   /** Which pictures the measurer measures and cuts crops from. */
@@ -46,7 +48,7 @@ export const ENUMS = Object.freeze({
 
 /** Role names that always exist; user roles are validated against the schema only. */
 export const BUILTIN_ROLE_NAMES = Object.freeze([
-  'default', 'measurer', 'cropper', 'designer',
+  'default', 'segmentator', 'cropper', 'measurer', 'recognizer', 'sampler', 'resolver', 'designer',
 ]);
 
 /** Alias spellings accepted in backend `supports` maps. */

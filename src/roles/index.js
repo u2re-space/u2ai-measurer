@@ -23,6 +23,10 @@
  */
 import { instructions as measurerInstructions, fragmentInstructions } from './measurer.js';
 import { instructions as cropperInstructions } from './cropper.js';
+import { instructions as segmentatorInstructions } from './segmentator.js';
+import { instructions as recognizerInstructions } from './recognizer.js';
+import { instructions as samplerInstructions } from './sampler.js';
+import { instructions as resolverInstructions } from './resolver.js';
 import { instructions as designerInstructions } from './designer.js';
 import { parseResponse, textPart } from '../openai/responses.js';
 import { withModelFallback } from '../openai/fallback.js';
@@ -34,9 +38,13 @@ import { documentationFor } from '../agent/documentation.js';
  * @type {Record<string, string>}
  */
 export const ROLE_INSTRUCTIONS = Object.freeze({
+    segmentator: segmentatorInstructions,
+    cropper: cropperInstructions,
     measurer: measurerInstructions,
     measurerFragment: fragmentInstructions,
-    cropper: cropperInstructions,
+    recognizer: recognizerInstructions,
+    sampler: samplerInstructions,
+    resolver: resolverInstructions,
     designer: designerInstructions,
 });
 

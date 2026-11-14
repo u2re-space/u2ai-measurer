@@ -8,7 +8,9 @@
  * rejected. The model therefore has to answer with every field, and `null` is the only way to say
  * "this was not measured" — which is the whole point of a measurement sheet.
  *
- * @exports MEASUREMENT_SCHEMA, DESIGN_SCHEMA, CROP_PLAN_SCHEMA, strictSchema, SUB_REFERENCE_KINDS
+ * @exports MEASUREMENT_SCHEMA, DESIGN_SCHEMA, CROP_PLAN_SCHEMA, SEGMENTATION_SCHEMA,
+ *          GEOMETRY_SCHEMA, RECOGNITION_SCHEMA, PALETTE_SCHEMA, strictSchema,
+ *          SUB_REFERENCE_KINDS
  * @ai.tags schema, roles
  * @ai.hint pure
  * @ai.hint legacy-0.2
@@ -326,6 +328,156 @@ export const CROP_PLAN_SCHEMA = object({
         }),
     },
     notes: { ...string, description: 'What was left out and why; empty when nothing.' },
+});
+
+/**
+ * The zones of a reference: what is where, before anything is measured.
+ *
+ * The segmentation is the cheapest stage and the most useful one: it names the parts of the
+ * picture and their boxes, so that the stages after it do not have to look for them again.
+ * It measures nothing else — no padding, no colours, no fonts. Those are other stages.
+ */
+export const SEGMENTATION_SCHEMA = object({
+    summary: { ...string, description: 'What the reference shows and how it was split into zones.' },
+    source: { ...string, description: 'The reference file this segmentation was made on.' },
+    canvas: { ...box, description: 'The whole reference size.' },
+    zones: {
+        type: 'array',
+        description: 'Every zone of the picture, from the largest region to the smallest element.',
+        items: object({
+            name: { ...string, description: 'Short zone name the author can reuse: left-rail, hero-card, award-badge, contact-email.' },
+            kind: measuredKind,
+            box,
+            role: { ...string, description: 'What the zone is in the page: header, hero, aside, card, button, label. Empty when unknown.' },
+            use: { ...string, description: 'How another role would reuse this zone: artwork, icon source, text block, background layer. Empty when nothing.' },
+            crop: {
+                type: 'string',
+                enum: ['asset', 'detail', 'none'],
+                description: 'asset: a fragment worth cutting out and reusing as an asset. detail: a fragment worth cutting to be read closely. none: the box is enough, cut nothing.',
+            },
+            hasText: { type: 'boolean', description: 'Whether the zone holds visible text. The recognizer reads it; the segmentator does not.' },
+            notes: { ...string, description: 'What is ambiguous about this zone; empty when nothing.' },
+        }),
+    },
+    notes: { ...string, description: 'What was left out and why; empty when nothing.' },
+});
+
+/**
+ * The geometry of the zones: the CSS numbers of a segmented picture.
+ *
+ * The boxes are known from the segmentation — the measurer does not look for them again. It
+ * measures what a box cannot tell: the display, the inner and the outer spacing, the borders,
+ * the radius, the rotation and the placement.
+ */
+export const GEOMETRY_SCHEMA = object({
+    summary: { ...string, description: 'What was measured and how.' },
+    source: { ...string, description: 'The reference file these numbers belong to.' },
+    unit: { ...string, description: 'Source unit of every raw number, usually px.' },
+    units: object({
+        source: { ...string, description: 'Source unit such as px, pt, cm, or unknown.' },
+        rootFontSize: { ...nullableNumber, description: 'Source pixels per 1rem when a root size can be supported; null when it is only a guess.' },
+        scale: { ...nullableNumber, description: 'CSS pixels per source unit when the reference is scaled; null when unknown.' },
+        preferred: { ...strings, description: 'CSS units suitable for the target, such as rem, em, %, vw, vh, ch.' },
+        notes: { ...string, description: 'How the units were chosen and which conversions are assumptions.' },
+    }),
+    confidence: { ...confidence, description: 'Overall confidence in these numbers; low when key values are inferred.' },
+    assumptions: { ...strings, description: 'Every inferred value or interpretation that is not directly measured.' },
+    elements: {
+        type: 'array',
+        description: 'One entry per zone that carries a number. A zone without a measured value may be left out.',
+        items: object({
+            zone: { ...string, description: 'The name of the zone from the segmentation. It must match it exactly.' },
+            display: { ...string, description: 'How the zone lays its content out: block, flex, grid, inline-flex, absolute, inline. Empty when unknown.' },
+            padding: { ...insets, description: 'Numeric inner spacing by side in source pixels; use null for sides that cannot be measured.' },
+            margin: { ...insets, description: 'Numeric outer spacing by side in source pixels; use null for sides that cannot be measured.' },
+            gap: { ...nullableNumber, description: 'Numeric gap between the children of the zone in source pixels, or null when unknown.' },
+            borders: { ...string, description: 'Where the borders and edges fall and how thick they are; empty when none.' },
+            radius: { ...nullableNumber, description: 'Corner radius in source pixels. Null when square or unknown.' },
+            rotation: { ...nullableNumber, description: 'Turn clockwise from upright, in degrees. Null when straight or unreadable.' },
+            placement: { ...string, description: 'How to place it: grid or flex track, absolute anchor, stacking order; empty when unknown.' },
+            css: { ...string, description: 'Ready CSS declarations with explicit units for this zone, such as width: 12.5rem; padding: 1rem 1.25rem. Empty when no reliable conversion exists.' },
+            confidence: { ...confidence, description: 'Confidence in this zone: high only when its numbers were actually read.' },
+            notes: { ...string, description: 'What is inferred, ambiguous, or hidden; empty when the zone is fully measured.' },
+        }),
+    },
+    rules: {
+        type: 'array',
+        description: 'Repeated measures: spacing scale, ratios, column width, baseline step.',
+        items: object({
+            name: { ...string, description: 'What this rule covers.' },
+            value: { ...nullableNumber, description: 'Numeric measured value, in the sheet unit.' },
+            unit: { ...string, description: 'Unit for this value, usually px.' },
+            css: { ...string, description: 'CSS form of this rule with an explicit unit, such as --space-2: 0.5rem or 1.5rem.' },
+            from: { ...string, description: 'What it was measured between; empty for a global rule.' },
+        }),
+    },
+    notes: { ...string, description: 'What is uncertain and what needs a re-measure on a crop; empty when nothing.' },
+});
+
+/**
+ * The texts and the fonts of the zones: what the picture says.
+ *
+ * The recognizer reads the fragments of the text zones and writes down the words and the
+ * typography. It measures no geometry — that is the measurer's job.
+ */
+export const RECOGNITION_SCHEMA = object({
+    summary: { ...string, description: 'What was read and where it was read.' },
+    texts: {
+        type: 'array',
+        description: 'One entry per text zone that was read.',
+        items: object({
+            zone: { ...string, description: 'The name of the zone from the segmentation. It must match it exactly.' },
+            text: { ...string, description: 'The visible text, exactly as it is written. Empty when the zone holds no readable text.' },
+            role: { ...string, description: 'What the text is: heading, subheading, body, label, button, caption, tag. Empty when unknown.' },
+            family: { ...string, description: 'The font family, when it can be identified. Do not guess an exact identity; empty when unknown.' },
+            familyConfidence: { ...confidence, description: 'Confidence that the visible family identification is correct; unknown when it cannot be identified.' },
+            fontSize: { ...nullableNumber, description: 'Measured font size in source pixels.' },
+            weight: { ...nullableNumber, description: 'Measured or estimated CSS numeric font weight; null when unreadable.' },
+            lineHeight: { ...nullableNumber, description: 'Measured line height in source pixels.' },
+            letterSpacing: { ...nullableNumber, description: 'Measured letter spacing in source pixels.' },
+            style: { ...string, description: 'Visible style such as italic, uppercase, or underline; empty when none.' },
+            confidence: { ...confidence, description: 'Confidence in this text; high only when it was read clearly.' },
+            notes: { ...string, description: 'What is uncertain about this text; empty when nothing.' },
+        }),
+    },
+    notes: { ...string, description: 'What could not be read and why; empty when nothing.' },
+});
+
+/**
+ * The palette of a reference: the colours it relies on, named.
+ *
+ * The sampler reads the pixels (locally or with the model) and names what every colour is for.
+ */
+export const PALETTE_SCHEMA = object({
+    summary: { ...string, description: 'What the palette covers and how the colours were read.' },
+    colors: {
+        type: 'array',
+        description: 'Every distinct colour the reference relies on, in the order it uses them.',
+        items: object({
+            name: { ...string, description: 'What this colour is for: background, surface, text, muted-text, accent, border, or a free name.' },
+            hex: { ...string, description: 'sRGB hex of the colour (#rrggbb). Empty when the colour was only perceived.' },
+            oklch: { ...string, description: 'OKLCH of the same bytes, e.g. oklch(0.62 0.19 132.4). Empty when unknown.' },
+            hsl: { ...string, description: 'HSL form of the same bytes. Empty when unknown.' },
+            rgb: { ...string, description: 'rgb() form of the same bytes. Empty when unknown.' },
+            luminance: { ...nullableNumber, description: 'WCAG relative luminance 0..1; null when not measured.' },
+            share: { ...nullableNumber, description: 'Coverage of the sampled area, 0..1; null when unknown.' },
+            method: { type: 'string', enum: ['sampled', 'perceived', 'inferred', ''], description: 'sampled: read from the pixels. perceived: read off the picture. inferred: reasoned from a neighbour. Empty when unknown.' },
+            zone: { ...string, description: 'The zone this colour was read from; empty when it was read from the whole canvas.' },
+            role: { ...string, description: 'What part of the element the colour belongs to: background, text, border, fill, icon, shadow. Empty when unknown.' },
+            contrast: { ...nullableNumber, description: 'WCAG contrast ratio against the surface it sits on; null when not computed.' },
+            confidence: { ...confidence, description: 'high only for a sampled value; a perceived colour is never high.' },
+            notes: { ...string, description: 'What is uncertain about this colour: a gradient, a blend, a photo white balance. Empty when nothing.' },
+        }),
+    },
+    background: { ...nullableString, description: 'The page/canvas background as hex. Null when not known.' },
+    text: { ...nullableString, description: 'The dominant text colour as hex. Null when not known.' },
+    accent: { ...nullableString, description: 'The accent/brand colour as hex. Null when not known.' },
+    colorSpace: object({
+        working: { ...string, description: 'The working colour space the numbers are in, usually sRGB.' },
+        encoding: { ...string, description: 'The transfer curve the stored bytes use. Empty when unknown.' },
+        assumption: { ...string, description: 'The assumption every value in this section rests on. Empty when nothing.' },
+    }),
+    notes: { ...string, description: 'Colour-only caveats the coder needs: gradients, blends, a plate whose white balance cannot be recovered. Empty when nothing.' },
 });
 
 /**

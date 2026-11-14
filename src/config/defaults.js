@@ -156,18 +156,59 @@ export const defaults = {
   },
 
   // --- stages -----------------------------------------------------------------
+  /**
+   * The stages of the pipeline. Every stage may run alone, and every stage may be switched off:
+   * the work of a stage is written to the output directory, so the stage after it reads the file
+   * of the stage before — even when they ran in different processes.
+   */
   stages: {
+    segmentate: {
+      enabled: true,
+      /** Max agent turns the segmentator may spend. */
+      maxTurns: 6,
+    },
     crop: {
       enabled: true,
-      /** Cut the crops the sheet names after the overview pass. */
-      autoCrops: true,
+      /** local: the harness cuts the fragments the segmentation names. ai: the cropper picks them. */
+      mode: 'local',
+      /** Max agent turns the cropper may spend in the ai mode. */
+      maxTurns: 6,
+      /** Cap of the fragments one run cuts; 0 lifts the cap. */
+      maxCrops: 192,
     },
     measure: {
       enabled: true,
-      /** Max agent turns for the overview pass. */
-      maxTurns: 16,
-      /** Max agent turns for the fragment pass. */
-      maxFragmentTurns: 8,
+      /** Max agent turns the measurer may spend. */
+      maxTurns: 8,
+    },
+    recognize: {
+      enabled: true,
+      /** Max agent turns the recognizer may spend. */
+      maxTurns: 8,
+    },
+    sample: {
+      enabled: true,
+      /** local: the harness reads the pixels, the model only names the colours. ai: the model samples itself. */
+      mode: 'local',
+      /** The effort of the local mode: the colours are read by the harness, the model only names them. */
+      localEffort: 'low',
+      /** The effort of the ai mode: the model reads the pixels itself and has to be sharp. */
+      aiEffort: 'xhigh',
+      /** Max agent turns the sampler may spend. */
+      maxTurns: 4,
+    },
+    resolve: {
+      enabled: true,
+      /** local: the harness merges the parts. ai: the resolver reconciles them. */
+      mode: 'local',
+      /** Max agent turns the resolver may spend in the ai mode. */
+      maxTurns: 4,
+      /** Write DESIGN.md next to the measurements. */
+      designMd: true,
+      /** Write a CSS token file next to the measurements. */
+      tokens: true,
+      /** Write a markdown report next to the measurements. */
+      report: true,
     },
     design: {
       enabled: true,
@@ -175,15 +216,6 @@ export const defaults = {
       maxTurns: 16,
       /** Write an HTML skeleton next to the design direction. */
       template: true,
-    },
-    resolve: {
-      enabled: true,
-      /** Write DESIGN.md next to the measurements. */
-      designMd: true,
-      /** Write a CSS token file next to the measurements. */
-      tokens: true,
-      /** Write a markdown report next to the measurements. */
-      report: true,
     },
   },
 
@@ -198,8 +230,12 @@ export const defaults = {
    */
   roles: {
     default: { model: null, effort: null, summary: null, maxEffort: null, context: null, temperature: null, maxOutputTokens: null, instructions: null, tools: null },
-    measurer: {},
+    segmentator: {},
     cropper: {},
+    measurer: {},
+    recognizer: {},
+    sampler: {},
+    resolver: {},
     designer: {},
   },
 
@@ -214,7 +250,12 @@ export const defaults = {
    */
   documentation: {
     roles: {
-      measurer: ['cssUnits', 'cssColors', 'cssDisplay', 'cssShapes', 'cssTransform', 'cssFonts', 'cssGrid', 'cssFlex', 'wcagColors'],
+      segmentator: [],
+      cropper: [],
+      measurer: ['cssUnits', 'cssDisplay', 'cssShapes', 'cssTransform', 'cssGrid', 'cssFlex'],
+      recognizer: ['cssFonts', 'cssColors'],
+      sampler: ['cssColors', 'wcagColors'],
+      resolver: ['cssUnits', 'cssColors'],
       designer: ['cssUnits', 'cssColors', 'cssDisplay', 'cssShapes', 'cssFonts', 'cssGrid', 'cssFlex', 'phosphorIcons', 'lucideIcons', 'googleFonts'],
     },
   },
@@ -257,10 +298,13 @@ export function defaultConfigText() {
       design: defaults.agent.design,
     },
     stages: {
-      crop: { enabled: true },
+      segmentate: { enabled: true },
+      crop: { enabled: true, mode: defaults.stages.crop.mode },
       measure: { enabled: true },
+      recognize: { enabled: true },
+      sample: { enabled: true, mode: defaults.stages.sample.mode },
+      resolve: { enabled: true, mode: defaults.stages.resolve.mode },
       design: { enabled: true },
-      resolve: { enabled: true },
     },
   };
   return `${JSON.stringify(starter, null, 2)}\n`;

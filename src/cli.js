@@ -15,7 +15,7 @@ import { parseArgs } from 'node:util';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import { loadConfig, redactConfig } from './config.js';
+import { loadConfig, redactConfig, ENUMS } from './config.js';
 import { createClient, resolveBackends } from './openai/client.js';
 import { createRenderer, createPlainRenderer, detectMode } from './cli/renderer.js';
 import { checkNodeVersion } from './cli/compatibility.js';
@@ -361,6 +361,10 @@ export async function main(argv = process.argv.slice(2)) {
     // The commands that talk to the model.
     if (!opts.images.length) {
         return usage(`The ${opts.command} command needs at least one picture.`);
+    }
+    const unknownStages = opts.stages.filter((stage) => !ENUMS.stages.includes(stage));
+    if (unknownStages.length) {
+        return usage(`Unknown stage: ${unknownStages.join(', ')}. The stages are: ${ENUMS.stages.join(', ')}.`);
     }
     if (!opts.dryRun && !apiKeyAvailable(config)) {
         console.error('No API key: set AI_MEASURE_API_KEY, put "apiKey" into ~/.ai-measure/config.json, '
