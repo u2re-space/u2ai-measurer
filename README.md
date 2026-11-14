@@ -115,6 +115,57 @@ The first positional is the command when it names one, so `ai-measure screen.png
 | `2` | wrong usage |
 | `130` | interrupted |
 
+## Backends and fallback
+
+A request goes to the first backend that answers. The list is ordered, and the next one takes
+the request when the previous one fails, so a second system is a fallback system and not a
+second choice:
+
+```json
+{
+  "backends": [
+    { "baseURL": "https://routerai.ru/api/v1", "env": "ROUTERAI_API_KEY" },
+    { "baseURL": "https://api.proxyapi.ru/v1", "env": "PROXYAPI_API_KEY" }
+  ]
+}
+```
+
+A backend may also declare what it serves and how a model is named there:
+
+```json
+{
+  "modelsBackends": {
+    "moonshotai/kimi-k3.1-pro": [
+      { "baseURL": "https://routerai.ru/api/v1", "env": "ROUTERAI_API_KEY" },
+      { "baseURL": "https://api.proxyapi.ru/v1", "env": "PROXYAPI_API_KEY" }
+    ]
+  }
+}
+```
+
+The Responses API is the first transport; a host that does not serve it is asked over Chat
+Completions instead.
+
+### The fallback of the models
+
+When a model fails — it is gone, overloaded, or it refuses the request — the next model of the
+chain answers the whole call again, from the first turn, with the picture in place:
+
+```json
+{
+  "fallback": {
+    "enabled": true,
+    "models": {
+      "moonshotai/kimi-k3.1-pro": ["moonshotai/kimi-k3", "openai/gpt-5.1"],
+      "*": ["moonshotai/kimi-k3"]
+    }
+  }
+}
+```
+
+The key `*` is the chain of every model that has no chain of its own. `fallback.enabled: false`
+turns the chain off.
+
 ## Outputs
 
 The artifacts land in `output.dir` (default `./measurements`):
@@ -167,7 +218,7 @@ The starter file:
     "measure": "auto",
     "measureSource": "auto",
     "measurerPasses": 1,
-    "measurerMaxTurns": 8,
+    "measurerMaxTurns": 16,
     "design": "off"
   },
   "stages": {
@@ -192,9 +243,11 @@ The knobs a user edits most often:
 | `agent.designerMaxTurns` | The tool turns the designer may spend. |
 | `output.dir` | Where the artifacts go. |
 | `roles.<name>.model` | The model of one role: `measurer`, `cropper`, `designer`. `roles.default` applies to every role without a model of its own. |
-| `documentation.roles` | The standards a role is given: `cssUnits`, `cssShapes`, `cssTransform`, `cssMotion`, `cssContain`, `cssImages`, `cssMasking`, `cssFonts`, `cssGrid`, `cssFlex`, `wcagColors`, `phosphorIcons`, `lucideIcons`, `googleFonts`. |
-| `tools` | The switches of the tools: `read`, `write`, `list`, `search`, `image_view`, `image_crop`, `image_split`, `image_sample`, `external_image`, `external_decompose`. |
+| `documentation.roles` | The standards a role is given: `cssUnits`, `cssColors`, `cssDisplay`, `cssShapes`, `cssTransform`, `cssMotion`, `cssContain`, `cssImages`, `cssMasking`, `cssFonts`, `cssGrid`, `cssFlex`, `wcagColors`, `phosphorIcons`, `lucideIcons`, `googleFonts`. |
+| `tools` | The switches of the tools: `read`, `write`, `list`, `search`, `image_view`, `image_crop`, `image_split`, `image_sample`, `color_parse`, `external_image`, `external_decompose`. |
 | `mcp.servers` | The MCP tool servers: `{ name, url }` or `{ name, command, args }`. |
+| `skills.dir` | Where the skill packs are; the default is `~/.ai-measure/skills`. |
+| `fallback.models` | The chain of models to try when one fails; `*` is the chain of every other model. |
 
 A config that does not validate is refused with a message that names the exact path — the
 messages of the config are in Russian, like in `u2ai-decomposer` and `u2ai-images`.
@@ -211,8 +264,29 @@ named after a role belongs to that role alone; `shared.md` and `_shared.md` belo
 └── shared.md     → every role
 ```
 
+A pack may also be a directory: `SKILL.md` is the pack and the other markdown files of the
+directory are its references. A frontmatter names the pack and the roles it belongs to:
+
+```
+~/.ai-measure/skills/
+└── house-style/
+    ├── SKILL.md
+    └── references.md
+```
+
+```markdown
+---
+name: House style
+description: The conventions of this project.
+roles: measurer, designer
+---
+
+Measure the spacing on a 4px grid.
+```
+
 The text is appended to the instructions of the role, so it is part of the system prompt and
-not something the model can be talked out of. The packs are read, never written.
+not something the model can be talked out of. The packs are read, never written. The fragment
+pass inherits the packs of the measurer.
 
 ### The API key
 
@@ -241,17 +315,53 @@ The key comes from the `apiKey` field, from the `env` field of a backend, or fro
 | `cropper` | — | The plan of the crops, when it is asked for one. |
 | `designer` | design | The visual direction, the assets and the HTML skeleton. |
 
+### How a role answers
+
+A role that has both tools and a schema answers in two phases.
+
+1. The model looks: it calls the tools, and every answer goes back into the conversation
+   together with the picture and the question, because a model that has called a tool has to
+   see the reference again.
+2. The model writes: the harness asks for the answer and the API holds it to the JSON schema.
+
+The order matters. A schema among the tools is one more reason to keep looking, and a model
+that is fond of tools spends the whole budget on it and never answers. The two phases keep the
+looking and the writing apart.
+
+The picture is in the conversation of every turn of the first phase, and the notes of the
+reference stay in the message of the second phase.
+
 ### The tools of the agent
 
-`view_image`, `crop_image`, `split_image`, `sample_colors`, `list_files`, `read_file`,
-`write_file`, `search_files`, `call_ai_image`, `call_ai_decompose` — plus the tools of the MCP
-servers. Every tool is bound to the working directory: a file may not be read outside it, and a
-file may only be written into the directories the stage opened.
+`view_image`, `crop_image`, `split_image`, `sample_colors`, `parse_color`, `list_files`,
+`read_file`, `write_file`, `search_files`, `call_ai_image`, `call_ai_decompose` — plus the tools
+of the MCP servers. Every tool is bound to the working directory: a file may not be read outside
+it, and a file may only be written into the directories the stage opened.
+
+`sample_colors` reads the pixels; `parse_color` reads a colour out of a text — a hex, a
+`rgb()`, an `oklch()`, a named colour — and gives it back in every notation, with its luminance
+and its WCAG contrast against a second colour. The colour spaces come from
+[culori](https://culorijs.org/): sRGB, Display-P3, HSL, HWB, OKLab, OKLCH, LAB, LCH and XYZ.
 
 The external CLIs are called as subprocesses. The binary is looked up in `AI_IMAGE_BIN` (or
 `AI_DECOMPOSE_BIN`), in the sibling checkout `u2ai-images` (or `u2ai-decomposer`) next to this
 package, in `submodules/u2ai-images` (or `submodules/u2ai-decomposer`), in the installed package
 `node_modules/@u2ai/images` (or `node_modules/@u2ai/decomposer`) and in `PATH`.
+
+## Examples
+
+`examples/` holds a run of the measurer over `examples/landing.png`:
+
+| Path | What it is |
+|------|------------|
+| `examples/landing.png`, `examples/landing.jpg` | The reference picture. |
+| `examples/measurements.json` | The measurement sheet of that picture. |
+| `examples/crops/` | The fragments the harness cut out of the sheet. |
+| `examples/skills/` | An example skill pack: copy it into `~/.ai-measure/skills`. |
+
+```bash
+node bin/ai-measure.js measure examples/landing.png --out examples
+```
 
 ## Development
 
