@@ -79,6 +79,14 @@ export function fromEnv(env = process.env) {
   const backends = backendList(env.AI_MEASURE_BACKENDS);
   if (backends) set(['backends'], backends);
 
+  // --- logging --------------------------------------------------------------
+  // A directory turns the log of the API calls on: the records are the witness of a chain
+  // that misbehaves.
+  if (typeof env.AI_MEASURE_LOG_DIR === 'string' && env.AI_MEASURE_LOG_DIR.trim()) {
+    set(['logging', 'enabled'], true);
+    set(['logging', 'dir'], env.AI_MEASURE_LOG_DIR.trim());
+  }
+
   // --- raster ---------------------------------------------------------------
   if (ENUMS.rasterEngines.includes(env.AI_MEASURE_RASTER_ENGINE)) set(['raster', 'engine'], env.AI_MEASURE_RASTER_ENGINE);
   set(['raster', 'magickPath'], env.AI_MEASURE_MAGICK_PATH);

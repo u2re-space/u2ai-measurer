@@ -135,6 +135,35 @@ The log of a run says what happens, not only that something happens:
 A run that dies says so: an unhandled rejection and an uncaught exception are printed, so an empty
 terminal is never the only sign of a failure.
 
+### The log of the API calls
+
+A run that fails says only "failed" — unless the log is on. The log is a witness: one JSON file
+per request, with the body that went out, the chain of the hosts, the time of every attempt, the
+answer that came back and the error that broke it.
+
+```json
+{
+  "at": "2026-11-15T03:41:02.113Z",
+  "path": "responses",
+  "model": "moonshotai/kimi-k3.1-pro",
+  "attempts": [
+    { "backend": "https://routerai.ru/api/v1", "ok": true, "durationMs": 181_233 }
+  ],
+  "durationMs": 181_233,
+  "response": { "output": [ "…" ] }
+}
+```
+
+The pictures are not written into the record: the body of an image is megabytes of base64, and it
+is the same picture every time. The record says how big it was. The log is off by default — turn it
+on with the directory:
+
+```json
+{ "logging": { "enabled": true, "dir": ".tmp/api" } }
+```
+
+or with `AI_MEASURE_LOG_DIR=.tmp/api`.
+
 ### Exit codes
 
 | Code | Meaning |
