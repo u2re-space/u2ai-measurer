@@ -1,32 +1,36 @@
 /**
  * @file src/stages/resolve.js
  * @module stages/resolve
- * @purpose Stage `resolve`: turn the measurement sheet into the files a coder can use.
+ * @purpose Stage `resolve`: the parts of the stages into the files a coder can use.
  *
- * The sheet is the answer of the measurer; the files are the answer of the CLI:
- *   - `measurements.json` — the sheet itself, with the crops and the conclusion;
- *   - `palette.json` — the colours of the reference, with their hex, OKLCH and contrast notes;
+ * The stages before this one left their parts in the output directory: the zones, the fragments,
+ * the geometry, the texts and the colours. The resolve stage puts them together and writes:
+ *   - `measurements.json` — one sheet: the zones with their numbers, their texts and their colours;
+ *   - `palette.json` — the colours with their hex, OKLCH and contrast notes;
  *   - `tokens.css` — the colours and the repeated measures as CSS custom properties;
  *   - `DESIGN.md` — the same tokens as a document a person reads;
- *   - `report.md` — what was measured, what is uncertain and which crops exist.
- *   - `crops/` — the fragments themselves, copied out of the work directory.
+ *   - `report.md` — what was measured, what is uncertain and which fragments exist.
  *
- * Every number in these files comes from the sheet. Nothing is invented here: a value the
- * measurer did not measure does not become a token.
+ * The stage works in two modes:
+ *   - local (the default): the harness assembles the parts. No model, no tokens, no money.
+ *   - ai: the resolver reconciles the parts — it reads all of them and writes one sheet.
  *
- * @depends node:path, node:fs/promises, stages/crop
- * @usedBy shared/pipeline
- * @exports runResolve, buildPalette, buildTokens, buildDesignMd, buildReport,
+ * Every number in the files comes from a stage. Nothing is invented here: a value no stage
+ * measured does not become a token.
+ *
+ * @depends node:path, node:fs/promises, agent/schemas, stages/artifacts
+ * @usedBy stages/index, shared/pipeline
+ * @exports runResolve, buildSheet, buildPalette, buildTokens, buildDesignMd, buildReport,
  *          collectCrops, repointCrops, MEASUREMENTS_FILE, PALETTE_FILE, TOKENS_FILE,
  *          DESIGN_MD_FILE, REPORT_FILE, CROPS_DIR
  * @ai.tags output, tokens, palette
  * @ai.hint io
- * @ai.hint legacy-0.2
  */
 
 import path from 'node:path';
 import { cp, mkdir, stat, writeFile } from 'node:fs/promises';
-import { cropSlug } from './artifacts.js';
+import { MEASUREMENT_SCHEMA } from '../agent/schemas.js';
+import { cropSlug, readStageFile } from './artifacts.js';
 import { toPosix } from '../agent/paths.js';
 
 /** The names of the artifacts, inside the output directory. */
@@ -35,19 +39,19 @@ export const PALETTE_FILE = 'palette.json';
 export const TOKENS_FILE = 'tokens.css';
 export const DESIGN_MD_FILE = 'DESIGN.md';
 export const REPORT_FILE = 'report.md';
-/** The directory of the crops, next to the artifacts: the sheet and the crops travel together. */
+/** The directory of the fragments, next to the artifacts: the sheet and the fragments travel together. */
 export const CROPS_DIR = 'crops';
 
 /**
- * Copy the crops next to the artifacts.
+ * Copy the fragments next to the artifacts.
  *
- * The crops are cut into the work directory, which is scratch: it is wiped and it is not part
- * of the delivery. The artifacts are the delivery, so the crops are copied into the output
- * directory and the sheet is pointed at the copies. A crop that cannot be copied keeps its old
- * path — a missing file is better than a wrong path.
+ * The fragments of the crop stage already lie in the output directory; the ones of an older run
+ * may still be in the work directory, which is scratch. A fragment that cannot be copied keeps
+ * its old path — a missing file is better than a wrong path.
+ *
  * @param {string} root the working directory
  * @param {string} target the output directory
- * @param {object[]} crops the crops of the stage
+ * @param {object[]} crops the fragments of the stage
  * @param {string[]} [warnings] the warnings of the run
  * @returns {Promise<{ crops: object[], map: Map<string, string> }>}
  * @exports
@@ -87,7 +91,7 @@ export async function collectCrops(root, target, crops = [], warnings = []) {
 }
 
 /**
- * Point the crop paths of a sheet at the copies.
+ * Point the fragment paths of a sheet at the copies.
  * @param {object} sheet the measurement sheet
  * @param {Map<string, string>} map the old path and the new one
  * @returns {object} a new sheet
@@ -125,6 +129,178 @@ function tokenSlug(value, fallback = 'token') {
 }
 
 /**
+ * The geometry part of one source, found by the name of the file.
+ * @param {object[]} sources the sources of a stage file
+ * @param {string} source the name of the file
+ * @returns {object|null}
+ * @ai.hint pure
+ */
+function partOf(sources, source) {
+    const list = Array.isArray(sources) ? sources : [];
+    const wanted = String(source ?? '');
+    return list.find((entry) => {
+        const name = String(entry?.source ?? '');
+        return name === wanted || path.basename(name) === path.basename(wanted);
+    }) ?? null;
+}
+
+/**
+ * Put the parts of the stages into one sheet.
+ *
+ * The zones of the segmentation are the skeleton: every element of the sheet is a zone, and the
+ * geometry and the texts are attached to the zone they belong to. A zone without a measurement
+ * stays in the sheet with an empty number — a missing value is better than an invented one.
+ *
+ * @param {{ segmentation?: object|null, geometry?: object|null, recognition?: object|null,
+ *   palette?: object|null, crops?: object[] }} parts the files of the stages
+ * @returns {object} the measurement sheet
+ * @exports
+ * @ai.hint pure
+ */
+export function buildSheet({ segmentation = null, geometry = null, recognition = null, palette = null, crops = [] } = {}) {
+    const sources = Array.isArray(segmentation?.sources) ? segmentation.sources : [];
+    const cropList = Array.isArray(crops) ? crops : [];
+
+    const elements = [];
+    const regions = [];
+    const rules = [];
+    const assumptions = [];
+    const notes = [];
+    let units = null;
+    let unit = 'px';
+    let confidence = 'unknown';
+    let summary = '';
+    let canvas = null;
+    let source = '';
+
+    for (const entry of sources) {
+        const file = String(entry?.source ?? '');
+        if (!source) source = file;
+        if (!canvas && entry?.canvas) canvas = entry.canvas;
+        if (entry?.summary) summary = summary || String(entry.summary);
+
+        const geometryPart = partOf(geometry?.sources, file);
+        const recognitionPart = partOf(recognition?.sources, file);
+        if (geometryPart?.units && !units) units = geometryPart.units;
+        if (geometryPart?.unit) unit = String(geometryPart.unit);
+        if (geometryPart?.confidence) confidence = String(geometryPart.confidence);
+        for (const item of Array.isArray(geometryPart?.assumptions) ? geometryPart.assumptions : []) {
+            assumptions.push(String(item));
+        }
+        if (geometryPart?.notes) notes.push(String(geometryPart.notes));
+
+        const numbers = new Map();
+        for (const item of Array.isArray(geometryPart?.elements) ? geometryPart.elements : []) {
+            numbers.set(String(item?.zone ?? ''), item);
+        }
+        const texts = new Map();
+        for (const item of Array.isArray(recognitionPart?.texts) ? recognitionPart.texts : []) {
+            texts.set(String(item?.zone ?? ''), item);
+        }
+        const samples = Array.isArray(palette?.samples) ? palette.samples : [];
+
+        for (const zone of Array.isArray(entry?.zones) ? entry.zones : []) {
+            const name = String(zone?.name ?? '');
+            const number = numbers.get(name) ?? null;
+            const text = texts.get(name) ?? null;
+            const crop = cropList.find((item) => String(item?.name ?? '') === name) ?? null;
+            const colors = samples
+                .filter((item) => String(item?.zone ?? '') === name)
+                .map((item) => ({
+                    role: String(item?.role ?? ''),
+                    hex: String(item?.hex ?? ''),
+                    oklch: String(item?.oklch ?? ''),
+                    method: 'sampled',
+                    contrast: null,
+                    confidence: 'high',
+                }));
+
+            elements.push({
+                name,
+                kind: String(zone?.kind ?? 'other'),
+                box: zone?.box ?? null,
+                display: String(number?.display ?? ''),
+                rotation: Number.isFinite(number?.rotation) ? number.rotation : null,
+                borders: String(number?.borders ?? ''),
+                radius: Number.isFinite(number?.radius) ? number.radius : null,
+                padding: number?.padding ?? null,
+                margin: number?.margin ?? null,
+                gap: Number.isFinite(number?.gap) ? number.gap : null,
+                spacing: '',
+                placement: String(number?.placement ?? ''),
+                css: String(number?.css ?? ''),
+                typography: text
+                    ? {
+                        role: String(text?.role ?? ''),
+                        family: String(text?.family ?? ''),
+                        familyConfidence: String(text?.familyConfidence ?? 'unknown'),
+                        fontSize: Number.isFinite(text?.fontSize) ? text.fontSize : null,
+                        weight: Number.isFinite(text?.weight) ? text.weight : null,
+                        lineHeight: Number.isFinite(text?.lineHeight) ? text.lineHeight : null,
+                        letterSpacing: Number.isFinite(text?.letterSpacing) ? text.letterSpacing : null,
+                        style: String(text?.style ?? ''),
+                    }
+                    : null,
+                confidence: String(number?.confidence ?? 'unknown'),
+                colors,
+                source: file || null,
+                notes: [String(zone?.notes ?? ''), String(number?.notes ?? ''), String(text?.notes ?? '')]
+                    .filter(Boolean)
+                    .join(' '),
+                use: String(zone?.use ?? ''),
+                crop: crop ? String(crop.crop ?? '') : null,
+            });
+
+            // The fragments are the reusable parts of the picture: they are the regions.
+            if (crop) {
+                regions.push({
+                    name,
+                    kind: String(zone?.kind ?? 'other'),
+                    box: zone?.box ?? null,
+                    how: String(zone?.role ?? ''),
+                    use: String(zone?.use ?? ''),
+                    source: file || null,
+                    crop: String(crop.crop ?? ''),
+                });
+            }
+        }
+
+        for (const rule of Array.isArray(geometryPart?.rules) ? geometryPart.rules : []) {
+            rules.push({
+                name: String(rule?.name ?? ''),
+                value: Number.isFinite(rule?.value) ? rule.value : null,
+                unit: String(rule?.unit ?? ''),
+                css: String(rule?.css ?? ''),
+                from: String(rule?.from ?? ''),
+            });
+        }
+    }
+
+    const colors = Array.isArray(palette?.colors) ? palette.colors : [];
+    return {
+        summary: summary || (colors.length ? 'The colours of the reference.' : ''),
+        source,
+        unit,
+        units: units ?? { source: unit, rootFontSize: null, scale: null, preferred: [], notes: '' },
+        confidence,
+        assumptions,
+        colors: {
+            palette: colors,
+            background: palette?.background ?? null,
+            text: palette?.text ?? null,
+            accent: palette?.accent ?? null,
+            colorSpace: palette?.colorSpace ?? { working: '', encoding: '', assumption: '' },
+            notes: String(palette?.notes ?? ''),
+        },
+        canvas,
+        elements,
+        regions,
+        rules,
+        notes: notes.join('\n'),
+    };
+}
+
+/**
  * The palette of the reference: the colours the sheet relies on.
  *
  * @param {object} sheet the measurement sheet
@@ -134,7 +310,7 @@ function tokenSlug(value, fallback = 'token') {
  */
 export function buildPalette(sheet) {
     const colors = Array.isArray(sheet?.colors?.palette) ? sheet.colors.palette : [];
-    const palette = {
+    return {
         name: 'reference',
         source: String(sheet?.source ?? ''),
         background: sheet?.colors?.background ?? null,
@@ -151,13 +327,15 @@ export function buildPalette(sheet) {
             luminance: Number.isFinite(item?.luminance) ? item.luminance : null,
             share: Number.isFinite(item?.share) ? item.share : null,
             method: String(item?.method ?? ''),
+            zone: String(item?.zone ?? ''),
+            role: String(item?.role ?? ''),
+            contrast: Number.isFinite(item?.contrast) ? item.contrast : null,
             confidence: String(item?.confidence ?? 'unknown'),
             source: item?.source ?? null,
             notes: String(item?.notes ?? ''),
         })),
         notes: String(sheet?.colors?.notes ?? ''),
     };
-    return palette;
 }
 
 /**
@@ -293,12 +471,12 @@ export function buildDesignMd(sheet, palette = null) {
  * The markdown report of the run: what was measured, how certain it is and what was cut.
  *
  * @param {object} sheet the measurement sheet
- * @param {object} [options] the crops and the conclusion of the stage
+ * @param {object} [options] the fragments of the stage
  * @returns {string}
  * @exports
  * @ai.hint pure
  */
-export function buildReport(sheet, { crops = [], conclusion = null } = {}) {
+export function buildReport(sheet, { crops = [] } = {}) {
     const elements = Array.isArray(sheet?.elements) ? sheet.elements : [];
     const regions = Array.isArray(sheet?.regions) ? sheet.regions : [];
     const lines = [
@@ -317,7 +495,6 @@ export function buildReport(sheet, { crops = [], conclusion = null } = {}) {
     lines.push(`- Regions: ${regions.length}`);
     lines.push(`- Rules: ${Array.isArray(sheet?.rules) ? sheet.rules.length : 0}`);
     lines.push(`- Crops: ${crops.length}`);
-    if (conclusion?.counts?.lowConfidence) lines.push(`- Low-confidence elements: ${conclusion.counts.lowConfidence}`);
     lines.push('');
 
     if (elements.length) {
@@ -378,37 +555,70 @@ export function buildReport(sheet, { crops = [], conclusion = null } = {}) {
  * @ai.hint io
  */
 export async function runResolve(state, notify = () => {}) {
-    const { root, config, sheet, crops = [], conclusion = null } = state;
+    const { root, config } = state;
     const outDir = state.outDir ?? config?.output?.dir ?? './measurements';
     const target = path.resolve(root, outDir);
     await mkdir(target, { recursive: true });
 
-    // The crops travel with the artifacts: the work directory is scratch, the output is the
+    // The parts the stages left. A stage that never ran leaves no file: the sheet misses it.
+    const segmentation = await readStageFile(outDir, 'segmentation');
+    const cropFile = await readStageFile(outDir, 'crops');
+    const geometry = await readStageFile(outDir, 'geometry');
+    const recognition = await readStageFile(outDir, 'recognition');
+    const palette = await readStageFile(outDir, 'palette');
+    const crops = Array.isArray(cropFile?.crops) ? cropFile.crops : [];
+
+    if (!segmentation && !geometry && !palette) {
+        state.warnings?.push('resolve: no stage left a part: the artifacts are empty.');
+    }
+
+    let sheet = buildSheet({ segmentation, geometry, recognition, palette, crops });
+
+    // The ai mode: the resolver reconciles the parts into one sheet.
+    const mode = config?.stages?.resolve?.mode ?? 'local';
+    if (mode === 'ai' && state.roles?.run) {
+        const answer = await askResolver({
+            state,
+            sheet,
+            segmentation,
+            geometry,
+            recognition,
+            palette,
+            crops,
+            signal: state.signal ?? null,
+        });
+        if (answer?.data) {
+            sheet = { ...sheet, ...answer.data, crops: sheet.crops };
+        } else if (answer?.error) {
+            state.warnings?.push(`resolve: the resolver failed (${answer.error}); the parts were joined by the harness.`);
+        }
+    }
+
+    // The fragments travel with the artifacts: the work directory is scratch, the output is the
     // delivery.
     const gathered = await collectCrops(root, target, crops, state.warnings ?? []);
-    const pointed = repointCrops({ ...(sheet ?? {}), conclusion: conclusion ?? null }, gathered.map);
-    const pointedConclusion = pointed.conclusion ?? null;
+    const pointed = repointCrops(sheet, gathered.map);
 
-    const palette = buildPalette(pointed);
-    const { css, tokens } = buildTokens(pointed, palette);
-    const designMd = buildDesignMd(pointed, palette);
-    const report = buildReport(pointed, { crops: gathered.crops, conclusion: pointedConclusion });
+    const paletteFile = buildPalette(pointed);
+    const { css, tokens } = buildTokens(pointed, paletteFile);
+    const designMd = buildDesignMd(pointed, paletteFile);
+    const report = buildReport(pointed, { crops: gathered.crops });
 
     const measurements = {
-        ...(pointed ?? {}),
+        ...pointed,
         crops: gathered.crops.map((item) => ({
             kind: String(item?.kind ?? ''),
             name: String(item?.name ?? ''),
             crop: toPosix(String(item?.crop ?? '')),
             box: item?.box ?? null,
         })),
-        conclusion: pointedConclusion,
+        conclusion: null,
         generatedBy: 'ai-measure',
     };
 
     const files = [
         { name: MEASUREMENTS_FILE, content: `${JSON.stringify(measurements, null, 2)}\n` },
-        { name: PALETTE_FILE, content: `${JSON.stringify(palette, null, 2)}\n` },
+        { name: PALETTE_FILE, content: `${JSON.stringify(paletteFile, null, 2)}\n` },
         { name: TOKENS_FILE, content: css },
         { name: DESIGN_MD_FILE, content: designMd },
         { name: REPORT_FILE, content: report },
@@ -431,9 +641,45 @@ export async function runResolve(state, notify = () => {}) {
         }
     }
 
-    state.palette = palette;
+    state.palette = paletteFile;
     state.tokens = tokens;
     state.artifacts = written;
     state.outputPath = path.join(target, MEASUREMENTS_FILE);
     notify({ type: 'resolve.done', files: written, tokens: tokens.length });
+}
+
+/**
+ * Ask the resolver to put the parts into one sheet.
+ *
+ * @param {object} options the parts of the stages
+ * @returns {Promise<object|null>} the answer of the resolver
+ * @ai.hint io
+ */
+async function askResolver({ state, sheet, segmentation, geometry, recognition, palette, crops, signal }) {
+    const maxTurns = Math.max(1, Number(state.config?.stages?.resolve?.maxTurns) || 4);
+    const text = [
+        '# Zones',
+        JSON.stringify(segmentation ?? {}, null, 2),
+        '',
+        '# Geometry',
+        JSON.stringify(geometry ?? {}, null, 2),
+        '',
+        '# Texts',
+        JSON.stringify(recognition ?? {}, null, 2),
+        '',
+        '# Colours',
+        JSON.stringify(palette ?? {}, null, 2),
+        '',
+        '# Fragments',
+        JSON.stringify(crops ?? [], null, 2),
+        '',
+        'Put these parts into one measurement sheet. Keep every number as it is and every zone name.',
+    ].join('\n');
+    return await state.roles.run('resolver', {
+        text,
+        schema: MEASUREMENT_SCHEMA,
+        schemaName: 'measurement',
+        maxTurns,
+        signal,
+    });
 }

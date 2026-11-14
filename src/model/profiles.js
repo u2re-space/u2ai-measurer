@@ -2,7 +2,7 @@
  * @file src/model/profiles.js
  * @module model/profiles
  * @purpose Model profiles: context window, max output, effort ceiling and effort ladder.
- * @exports MODEL_PROFILES, getModelProfile, snapEffort, contextBytes, maxOutputFor
+ * @exports MODEL_PROFILES, getModelProfile, snapEffort, capEffort, contextBytes, maxOutputFor
  * @ai.tags model, profiles
  * @ai.hint pure
  */
@@ -89,6 +89,30 @@ export function snapEffort(effort, profile) {
         if (index <= wantedIndex && (best === null || index > EFFORT_ORDER.indexOf(best))) best = item;
     }
     return best ?? ladder[0];
+}
+
+/**
+ * The lower of two effort levels: the ceiling of a stage.
+ *
+ * A stage asks for the effort it needs; the run has a ceiling, and the answer is the lower of
+ * the two. A stage that wants `xhigh` under a `high` ceiling gets `high` — the ceiling is the
+ * promise the user made about the money of the run.
+ * @param {string|null} effort the effort the stage wants
+ * @param {string|null} ceiling the ceiling of the run
+ * @returns {string|null}
+ * @exports
+ * @ai.hint pure
+ */
+export function capEffort(effort, ceiling) {
+    const wanted = effort ? String(effort) : null;
+    const top = ceiling ? String(ceiling) : null;
+    if (!wanted) return top;
+    if (!top) return wanted;
+    const wantedIndex = EFFORT_ORDER.indexOf(wanted);
+    const topIndex = EFFORT_ORDER.indexOf(top);
+    if (wantedIndex < 0) return top;
+    if (topIndex < 0) return wanted;
+    return EFFORT_ORDER[Math.min(wantedIndex, topIndex)];
 }
 
 /**

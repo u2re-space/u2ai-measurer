@@ -16,6 +16,7 @@ import { runMeasureStage } from './measure.js';
 import { runSegmentStage } from './segmentate.js';
 import { runCropStage } from './cropper.js';
 import { runRecognizeStage } from './recognize.js';
+import { runSampleStage } from './sample.js';
 import { runResolve, MEASUREMENTS_FILE } from './resolve.js';
 
 /**
@@ -130,6 +131,40 @@ async function cropStage(state, notify) {
 }
 
 /**
+ * The sample stage: the colours of the reference, named.
+ * @param {object} state the pipeline state
+ * @param {Function} notify event callback
+ * @returns {Promise<void>}
+ * @ai.hint io
+ */
+async function sampleStage(state, notify) {
+    const result = await runSampleStage({
+        root: state.root,
+        workId: state.workId,
+        config: state.config,
+        runner: state.roles,
+        references: state.references,
+        outDir: state.outDir,
+        effort: state.effort ?? null,
+        notify,
+        signal: state.signal ?? null,
+    });
+    state.palette = result.palette;
+    state.warnings.push(...result.warnings);
+}
+
+/**
+ * The resolve stage: the parts of the stages into the files of the delivery.
+ * @param {object} state the pipeline state
+ * @param {Function} notify event callback
+ * @returns {Promise<void>}
+ * @ai.hint io
+ */
+async function resolveStage(state, notify) {
+    await runResolve(state, notify);
+}
+
+/**
  * The stages of the pipeline, in the order they run.
  *
  * The order is fixed: a stage may only read what the earlier stages wrote. Every stage leaves
@@ -144,7 +179,8 @@ export const STAGE_DEFS = Object.freeze([
     { id: 'crop', label: 'Cut the fragments', role: 'cropper', run: cropStage, dir: 'crops', needsReferences: false },
     { id: 'measure', label: 'Measure the zones', role: 'measurer', run: measureStage, dir: 'stages', needsReferences: true },
     { id: 'recognize', label: 'Read the texts', role: 'recognizer', run: recognizeStage, dir: 'stages', needsReferences: true },
-    { id: 'resolve', label: 'Write the artifacts', role: null, run: runResolve, dir: MEASUREMENTS_FILE, needsReferences: false },
+    { id: 'sample', label: 'Read the colours', role: 'sampler', run: sampleStage, dir: 'stages', needsReferences: true },
+    { id: 'resolve', label: 'Write the artifacts', role: null, run: resolveStage, dir: MEASUREMENTS_FILE, needsReferences: false },
 ]);
 
 /** The ids of the stages, in order. */

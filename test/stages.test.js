@@ -27,7 +27,8 @@ import { runRecognizeStage } from '../src/stages/recognize.js';
 import { writeStageFile } from '../src/stages/artifacts.js';
 import { splitReferences } from '../src/stages/references.js';
 import { runDesignStage, shouldRunDesign, readDesignMd, clipMiddle } from '../src/stages/design.js';
-import { runResolve, buildPalette, buildTokens, buildDesignMd, buildReport } from '../src/stages/resolve.js';
+import { runResolve, buildSheet, buildPalette, buildTokens, buildDesignMd, buildReport } from '../src/stages/resolve.js';
+import { runSampleStage, mergeSampled, colorLines } from '../src/stages/sample.js';
 import { STAGE_IDS, stageById } from '../src/stages/index.js';
 
 /** A measurement sheet with one element, one region and one repeated measure. */
@@ -137,6 +138,31 @@ const RECOGNITION = {
         confidence: 'high',
         notes: '',
     }],
+    notes: '',
+};
+
+/** The palette of the reference, in the shape the sampler answers in. */
+const PALETTE = {
+    summary: 'The colours of the picture.',
+    colors: [{
+        name: 'Paper',
+        hex: '#f0f1f1',
+        oklch: 'oklch(0.96 0.003 200)',
+        hsl: 'hsl(180 2% 95%)',
+        rgb: 'rgb(240 241 241)',
+        luminance: 0.88,
+        share: 1,
+        method: 'sampled',
+        zone: '',
+        role: 'background',
+        contrast: null,
+        confidence: 'high',
+        notes: '',
+    }],
+    background: '#f0f1f1',
+    text: null,
+    accent: null,
+    colorSpace: { working: 'sRGB', encoding: 'sRGB', assumption: 'no ICC profile' },
     notes: '',
 };
 
@@ -252,10 +278,11 @@ function fakeRunner(sheet) {
 }
 
 test('the registry holds the stages of the pipeline', () => {
-    assert.deepEqual([...STAGE_IDS], ['design', 'segmentate', 'crop', 'measure', 'recognize', 'resolve']);
+    assert.deepEqual([...STAGE_IDS], ['design', 'segmentate', 'crop', 'measure', 'recognize', 'sample', 'resolve']);
     assert.equal(stageById('measure').role, 'measurer');
     assert.equal(stageById('segmentate').role, 'segmentator');
     assert.equal(stageById('recognize').role, 'recognizer');
+    assert.equal(stageById('sample').role, 'sampler');
     assert.equal(stageById('resolve').role, null);
     assert.equal(stageById('nothing'), null);
 });
@@ -491,30 +518,133 @@ test('a long DESIGN.md keeps its head and its tail', () => {
     assert.match(clipped, /clipped/);
 });
 
+/**
+ * Write the files of the stages into the output directory.
+ * @param {string} outDir the output directory
+ * @param {object[]} [crops] the fragments of the crop stage
+ * @returns {Promise<void>}
+ */
+async function writeParts(outDir, crops = []) {
+    await writeStageFile(outDir, 'segmentation', {
+        generatedBy: 'ai-measure',
+        stage: 'segmentate',
+        sources: [{
+            source: 'picture.png',
+            summary: 'A small mockup.',
+            canvas: { x: 0, y: 0, width: 100, height: 80 },
+            scale: 1,
+            zones: SEGMENTATION.zones,
+        }],
+    });
+    await writeStageFile(outDir, 'geometry', {
+        generatedBy: 'ai-measure',
+        stage: 'measure',
+        sources: [{
+            source: 'picture.png',
+            summary: GEOMETRY.summary,
+            unit: GEOMETRY.unit,
+            units: GEOMETRY.units,
+            confidence: GEOMETRY.confidence,
+            assumptions: GEOMETRY.assumptions,
+            elements: GEOMETRY.elements,
+            rules: GEOMETRY.rules,
+            notes: GEOMETRY.notes,
+        }],
+    });
+    await writeStageFile(outDir, 'recognition', {
+        generatedBy: 'ai-measure',
+        stage: 'recognize',
+        sources: [{
+            source: 'picture.png',
+            summary: RECOGNITION.summary,
+            texts: RECOGNITION.texts,
+            notes: RECOGNITION.notes,
+        }],
+    });
+    await writeStageFile(outDir, 'palette', {
+        generatedBy: 'ai-measure',
+        stage: 'sample',
+        mode: 'local',
+        summary: 'The colours of the picture.',
+        colors: [{
+            name: 'Ink', hex: '#1c1c1b', oklch: 'oklch(0.23 0.002 108)', hsl: 'hsl(60 2% 11%)',
+            rgb: 'rgb(28 28 27)', luminance: 0.01, share: 0.28, method: 'sampled',
+            zone: 'badge', role: 'fill', contrast: null, confidence: 'high', notes: '',
+        }],
+        background: '#f0f1f1',
+        text: '#1c1c1b',
+        accent: null,
+        colorSpace: { working: 'sRGB', encoding: 'sRGB', assumption: 'no ICC profile' },
+        notes: '',
+        samples: [{
+            hex: '#1c1c1b', rgb: 'rgb(28 28 27)', hsl: 'hsl(60 2% 11%)', oklch: 'oklch(0.23 0.002 108)',
+            luminance: 0.01, share: 0.28, source: 'picture.png', zone: 'badge', method: 'sampled',
+            confidence: 'high', notes: '',
+        }],
+    });
+    if (crops.length) {
+        await writeStageFile(outDir, 'crops', {
+            generatedBy: 'ai-measure',
+            stage: 'crop',
+            mode: 'local',
+            crops,
+        });
+    }
+}
+
 test('the resolve stage writes the five artifacts', async () => {
     const { root, cleanup } = await workspace();
     try {
+        const outDir = path.join(root, 'measurements');
+        await writeParts(outDir, [{
+            kind: 'asset', name: 'badge', crop: 'crops/01-asset-badge.png',
+            box: { x: 10, y: 10, width: 20, height: 20 }, source: 'picture.png',
+        }]);
         const state = {
             root,
             config: { output: { dir: './measurements' } },
-            sheet: SHEET,
-            crops: [{ kind: 'element', name: 'Header', crop: '.tmp/w1/crops/01-element-header.png', box: { x: 0, y: 0, width: 100, height: 20 } }],
-            conclusion: null,
+            outDir,
             warnings: [],
         };
         await runResolve(state, () => {});
-        const dir = path.join(root, 'measurements');
         for (const name of ['measurements.json', 'palette.json', 'tokens.css', 'DESIGN.md', 'report.md']) {
-            assert.ok(await stat(path.join(dir, name)).then((info) => info.isFile()), `${name} is missing`);
+            assert.ok(await stat(path.join(outDir, name)).then((info) => info.isFile()), `${name} is missing`);
         }
-        const measurements = JSON.parse(await readFile(path.join(dir, 'measurements.json'), 'utf-8'));
+        const measurements = JSON.parse(await readFile(path.join(outDir, 'measurements.json'), 'utf-8'));
         assert.equal(measurements.generatedBy, 'ai-measure');
-        assert.equal(measurements.crops.length, 1);
-        const css = await readFile(path.join(dir, 'tokens.css'), 'utf-8');
+        // Every zone of the segmentation is an element of the sheet.
+        assert.equal(measurements.elements.length, 3);
+        assert.equal(measurements.regions.length, 1);
+        assert.equal(measurements.rules.length, 1);
+        const css = await readFile(path.join(outDir, 'tokens.css'), 'utf-8');
         assert.match(css, /--color-ink: #1c1c1b;/);
         assert.match(css, /--space-2: 0\.5rem;/);
-        const report = await readFile(path.join(dir, 'report.md'), 'utf-8');
+        const report = await readFile(path.join(outDir, 'report.md'), 'utf-8');
         assert.match(report, /# Measurement report/);
+    } finally {
+        await cleanup();
+    }
+});
+
+test('the elements carry the numbers of the geometry and the texts of the recognition', async () => {
+    const { root, cleanup } = await workspace();
+    try {
+        const outDir = path.join(root, 'measurements');
+        await writeParts(outDir);
+        const state = { root, config: { output: { dir: './measurements' } }, outDir, warnings: [] };
+        await runResolve(state, () => {});
+        const measurements = JSON.parse(await readFile(path.join(outDir, 'measurements.json'), 'utf-8'));
+        const badge = measurements.elements.find((item) => item.name === 'badge');
+        const caption = measurements.elements.find((item) => item.name === 'caption');
+        assert.equal(badge.padding.top, 8);
+        assert.equal(badge.radius, 4);
+        assert.equal(badge.box.width, 20);
+        assert.equal(badge.confidence, 'high');
+        assert.equal(caption.typography.family, 'Inter');
+        assert.equal(caption.typography.fontSize, 14);
+        // The colour of the zone is attached to the zone it was read from.
+        assert.equal(badge.colors[0].hex, '#1c1c1b');
+        assert.equal(caption.colors.length, 0);
     } finally {
         await cleanup();
     }
@@ -523,33 +653,25 @@ test('the resolve stage writes the five artifacts', async () => {
 test('the crops travel with the artifacts', async () => {
     const { root, cleanup } = await workspace();
     try {
-        // A crop in the work directory, as the measurement stage leaves it.
+        // A crop in the work directory, as an older run leaves it.
         const work = path.join(root, '.tmp', 'w1', 'crops');
         await mkdir(work, { recursive: true });
-        await writeFile(path.join(work, '01-element-header.png'), 'PNG');
-        const sheet = {
-            ...SHEET,
-            elements: [{ ...SHEET.elements[0], crop: '.tmp/w1/crops/01-element-header.png' }],
-            regions: SHEET.regions.map((item) => ({ ...item, crop: null })),
-        };
-        const state = {
-            root,
-            config: { output: { dir: './measurements' } },
-            sheet,
-            crops: [{ kind: 'element', name: 'Header', crop: '.tmp/w1/crops/01-element-header.png', box: { x: 0, y: 0, width: 10, height: 10 } }],
-            conclusion: null,
-            warnings: [],
-        };
+        await writeFile(path.join(work, '01-asset-badge.png'), 'PNG');
+        const outDir = path.join(root, 'measurements');
+        await writeParts(outDir, [{
+            kind: 'asset', name: 'badge', crop: '.tmp/w1/crops/01-asset-badge.png',
+            box: { x: 10, y: 10, width: 20, height: 20 }, source: 'picture.png',
+        }]);
+        const state = { root, config: { output: { dir: './measurements' } }, outDir, warnings: [] };
         await runResolve(state, () => {});
-        const dir = path.join(root, 'measurements');
-        const copy = path.join(dir, 'crops', '01-element-header.png');
+        const copy = path.join(outDir, 'crops', '01-asset-badge.png');
         assert.ok(await stat(copy).then((info) => info.isFile()), 'the crop is not in the output');
-        const measurements = JSON.parse(await readFile(path.join(dir, 'measurements.json'), 'utf-8'));
-        assert.equal(measurements.crops[0].crop, 'crops/01-element-header.png');
-        assert.equal(measurements.elements[0].crop, 'crops/01-element-header.png');
+        const measurements = JSON.parse(await readFile(path.join(outDir, 'measurements.json'), 'utf-8'));
+        assert.equal(measurements.crops[0].crop, 'crops/01-asset-badge.png');
+        assert.equal(measurements.regions[0].crop, 'crops/01-asset-badge.png');
         assert.doesNotMatch(JSON.stringify(measurements), /\.tmp\/w1/);
-        const report = await readFile(path.join(dir, 'report.md'), 'utf-8');
-        assert.match(report, /crops\/01-element-header\.png/);
+        const report = await readFile(path.join(outDir, 'report.md'), 'utf-8');
+        assert.match(report, /crops\/01-asset-badge\.png/);
         assert.doesNotMatch(report, /\.tmp\/w1/);
     } finally {
         await cleanup();
@@ -559,14 +681,12 @@ test('the crops travel with the artifacts', async () => {
 test('a crop that is not there keeps its old path', async () => {
     const { root, cleanup } = await workspace();
     try {
-        const state = {
-            root,
-            config: { output: { dir: './measurements' } },
-            sheet: SHEET,
-            crops: [{ kind: 'element', name: 'Gone', crop: '.tmp/w1/crops/gone.png' }],
-            conclusion: null,
-            warnings: [],
-        };
+        const outDir = path.join(root, 'measurements');
+        await writeParts(outDir, [{
+            kind: 'asset', name: 'badge', crop: '.tmp/w1/crops/gone.png',
+            box: { x: 10, y: 10, width: 20, height: 20 }, source: 'picture.png',
+        }]);
+        const state = { root, config: { output: { dir: './measurements' } }, outDir, warnings: [] };
         await runResolve(state, () => {});
         const measurements = JSON.parse(await readFile(path.join(root, 'measurements', 'measurements.json'), 'utf-8'));
         assert.equal(measurements.crops[0].crop, '.tmp/w1/crops/gone.png');
@@ -594,11 +714,174 @@ test('the design document and the report name the source', () => {
     assert.match(buildReport(SHEET, { crops: [] }), /\*\*Source:\*\* picture\.png/);
 });
 
+test('the sample stage reads the colours from the pixels and lets the model name them', async () => {
+    const { root, cleanup } = await workspace();
+    try {
+        const outDir = path.join(root, 'measurements');
+        await writeStageFile(outDir, 'segmentation', {
+            generatedBy: 'ai-measure',
+            stage: 'segmentate',
+            sources: [{
+                source: 'picture.png',
+                summary: 'A small mockup.',
+                canvas: { x: 0, y: 0, width: 100, height: 80 },
+                scale: 1,
+                zones: SEGMENTATION.zones,
+            }],
+        });
+        const seen = [];
+        const runner = {
+            run: async (role, params) => {
+                seen.push({ role, params });
+                return {
+                    status: 'completed',
+                    data: PALETTE,
+                    text: '',
+                    toolCalls: [],
+                    usage: null,
+                    error: null,
+                };
+            },
+        };
+        const config = cloneDefaults();
+        config.stages.sample.mode = 'local';
+        const result = await runSampleStage({
+            root,
+            workId: 'w1',
+            config,
+            runner,
+            references: [{ rel: 'picture.png', kind: 'image' }],
+            outDir,
+        });
+        assert.deepEqual(result.warnings, []);
+        assert.equal(seen.length, 1);
+        assert.equal(seen[0].role, 'sampler');
+        // The model sees no picture in the local mode: it only names the colours it was given.
+        assert.deepEqual(seen[0].params.parts, []);
+        assert.match(seen[0].params.text, /#f0f1f1/);
+        // The file of the stage holds the colours.
+        const written = JSON.parse(await readFile(path.join(outDir, 'stages', 'palette.json'), 'utf-8'));
+        assert.equal(written.stage, 'sample');
+        assert.equal(written.mode, 'local');
+        assert.ok(written.colors.length >= 1);
+        assert.ok(written.samples.length >= 1);
+        // The colours of the pixels are in the palette even when the model names nothing.
+        assert.ok(written.colors.every((item) => typeof item.hex === 'string' && item.hex.length > 0));
+    } finally {
+        await cleanup();
+    }
+});
+
+test('the sample stage falls back to the colours of the pixels when the model names none', async () => {
+    const { root, cleanup } = await workspace();
+    try {
+        const outDir = path.join(root, 'measurements');
+        await writeStageFile(outDir, 'segmentation', {
+            generatedBy: 'ai-measure',
+            stage: 'segmentate',
+            sources: [{
+                source: 'picture.png',
+                canvas: { x: 0, y: 0, width: 100, height: 80 },
+                scale: 1,
+                zones: [],
+            }],
+        });
+        const runner = {
+            run: async () => ({
+                status: 'completed', data: { summary: '', colors: [] }, text: '',
+                toolCalls: [], usage: null, error: null,
+            }),
+        };
+        const config = cloneDefaults();
+        config.stages.sample.mode = 'local';
+        const result = await runSampleStage({
+            root, workId: 'w1', config, runner,
+            references: [{ rel: 'picture.png', kind: 'image' }],
+            outDir,
+        });
+        assert.ok(result.palette.colors.length >= 1);
+        assert.equal(result.palette.colors[0].method, 'sampled');
+    } finally {
+        await cleanup();
+    }
+});
+
+test('the colours of the pixels are put back into the colours the model named', () => {
+    const samples = [{
+        hex: '#1c1c1b', rgb: 'rgb(28 28 27)', hsl: 'hsl(60 2% 11%)',
+        oklch: 'oklch(0.23 0.002 108)', luminance: 0.01, share: 0.28,
+        source: 'picture.png', zone: 'badge', method: 'sampled', confidence: 'high', notes: '',
+    }];
+    const named = [{
+        name: 'Ink', hex: '#1c1c1b', oklch: '', hsl: '', rgb: '', luminance: null,
+        share: null, method: 'perceived', zone: '', role: 'text', contrast: null,
+        confidence: 'medium', notes: '',
+    }];
+    const merged = mergeSampled(named, samples);
+    assert.equal(merged[0].oklch, 'oklch(0.23 0.002 108)');
+    assert.equal(merged[0].share, 0.28);
+    assert.equal(merged[0].zone, 'badge');
+    assert.equal(merged[0].method, 'sampled');
+    assert.equal(merged[0].confidence, 'high');
+    // A colour the model invented keeps its own numbers and stays perceived.
+    const invented = mergeSampled([{ name: 'Glow', hex: '#ff00aa', method: '', confidence: '' }], samples);
+    assert.equal(invented[0].method, 'perceived');
+    assert.equal(invented[0].confidence, 'medium');
+});
+
+test('the sampled colours are written as a list the model can read', () => {
+    const text = colorLines([{ hex: '#1c1c1b', zone: 'badge', rgb: 'rgb(28 28 27)', oklch: 'oklch(0.23 0.002 108)', share: 0.28 }]);
+    assert.match(text, /- #1c1c1b/);
+    assert.match(text, /zone: badge/);
+    assert.match(text, /share: 28%/);
+});
+
+test('the sheet joins the zones, the numbers, the texts and the colours', () => {
+    const sheet = buildSheet({
+        segmentation: {
+            sources: [{
+                source: 'picture.png',
+                summary: 'A small mockup.',
+                canvas: { x: 0, y: 0, width: 100, height: 80 },
+                zones: SEGMENTATION.zones,
+            }],
+        },
+        geometry: {
+            sources: [{
+                source: 'picture.png',
+                unit: 'px',
+                confidence: 'high',
+                assumptions: ['The picture is a screenshot.'],
+                elements: GEOMETRY.elements,
+                rules: GEOMETRY.rules,
+            }],
+        },
+        recognition: {
+            sources: [{ source: 'picture.png', texts: RECOGNITION.texts }],
+        },
+        palette: {
+            colors: [{ name: 'Ink', hex: '#1c1c1b', oklch: 'oklch(0.23 0.002 108)', method: 'sampled', confidence: 'high' }],
+            background: '#f0f1f1',
+            samples: [{ hex: '#1c1c1b', zone: 'badge', role: 'fill' }],
+        },
+        crops: [{ kind: 'asset', name: 'badge', crop: 'crops/01-asset-badge.png' }],
+    });
+    assert.equal(sheet.elements.length, 3);
+    const badge = sheet.elements.find((item) => item.name === 'badge');
+    assert.equal(badge.padding.top, 8);
+    assert.equal(badge.colors[0].hex, '#1c1c1b');
+    assert.equal(sheet.regions.length, 1);
+    assert.equal(sheet.regions[0].crop, 'crops/01-asset-badge.png');
+    assert.equal(sheet.rules.length, 1);
+    assert.equal(sheet.confidence, 'high');
+});
+
 test('the pipeline writes the artifacts and the crops of a real run', async () => {
     const host = await mockHost({
         'You are the segmentator': SEGMENTATION,
         'You are the measurer': GEOMETRY,
         'You are the recognizer': RECOGNITION,
+        'You are the sampler': PALETTE,
     });
     const { root, cleanup } = await workspace();
     try {
@@ -631,9 +914,11 @@ test('the pipeline writes the artifacts and the crops of a real run', async () =
         // The geometry and the texts are written next to it.
         assert.ok(await stat(path.join(root, 'measurements', 'stages', 'geometry.json')).then((info) => info.isFile()));
         assert.ok(await stat(path.join(root, 'measurements', 'stages', 'recognition.json')).then((info) => info.isFile()));
-        // The host was asked six times over the Responses route: every role explores with the
+        // The palette is read from the pixels and written next to the other parts.
+        assert.ok(await stat(path.join(root, 'measurements', 'stages', 'palette.json')).then((info) => info.isFile()));
+        // The host was asked eight times over the Responses route: every role explores with the
         // tools, and answers in the second call under the schema.
-        assert.equal(host.calls.length, 6);
+        assert.equal(host.calls.length, 8);
         assert.match(host.calls[0].url, /\/v1\/responses$/);
         assert.ok(host.calls[0].body.input_text === undefined);
         assert.ok(host.calls[0].body.text === undefined, 'the first call carries no schema');
@@ -667,7 +952,7 @@ test('the pipeline answers with the plan when it is a dry run', async () => {
         assert.equal(host.calls.length, 0);
         const plan = events.find((event) => event.type === 'plan');
         assert.ok(plan);
-        assert.deepEqual(plan.stages.map((stage) => stage.id), ['segmentate', 'crop', 'measure', 'recognize', 'resolve']);
+        assert.deepEqual(plan.stages.map((stage) => stage.id), ['segmentate', 'crop', 'measure', 'recognize', 'sample', 'resolve']);
         assert.match(plan.outputs[0], /measurements\.json$/);
     } finally {
         await cleanup();
@@ -693,7 +978,7 @@ test('the pipeline reports the stages that are switched off', async () => {
         });
         client.close();
         const plan = events.find((event) => event.type === 'plan');
-        assert.deepEqual(plan.stages.map((stage) => stage.id), ['segmentate', 'crop', 'recognize', 'resolve']);
+        assert.deepEqual(plan.stages.map((stage) => stage.id), ['segmentate', 'crop', 'recognize', 'sample', 'resolve']);
     } finally {
         await cleanup();
         await host.close();

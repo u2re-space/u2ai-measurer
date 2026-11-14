@@ -230,7 +230,6 @@ export async function runPipeline({
         recognition: null,
         sheet: null,
         crops: [],
-        conclusion: null,
         palette: null,
         tokens: [],
         artifacts: [],
