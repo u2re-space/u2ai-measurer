@@ -411,6 +411,62 @@ test('the resolve stage writes the five artifacts', async () => {
     }
 });
 
+test('the crops travel with the artifacts', async () => {
+    const { root, cleanup } = await workspace();
+    try {
+        // A crop in the work directory, as the measurement stage leaves it.
+        const work = path.join(root, '.tmp', 'w1', 'crops');
+        await mkdir(work, { recursive: true });
+        await writeFile(path.join(work, '01-element-header.png'), 'PNG');
+        const sheet = {
+            ...SHEET,
+            elements: [{ ...SHEET.elements[0], crop: '.tmp/w1/crops/01-element-header.png' }],
+            regions: SHEET.regions.map((item) => ({ ...item, crop: null })),
+        };
+        const state = {
+            root,
+            config: { output: { dir: './measurements' } },
+            sheet,
+            crops: [{ kind: 'element', name: 'Header', crop: '.tmp/w1/crops/01-element-header.png', box: { x: 0, y: 0, width: 10, height: 10 } }],
+            conclusion: null,
+            warnings: [],
+        };
+        await runResolve(state, () => {});
+        const dir = path.join(root, 'measurements');
+        const copy = path.join(dir, 'crops', '01-element-header.png');
+        assert.ok(await stat(copy).then((info) => info.isFile()), 'the crop is not in the output');
+        const measurements = JSON.parse(await readFile(path.join(dir, 'measurements.json'), 'utf-8'));
+        assert.equal(measurements.crops[0].crop, 'crops/01-element-header.png');
+        assert.equal(measurements.elements[0].crop, 'crops/01-element-header.png');
+        assert.doesNotMatch(JSON.stringify(measurements), /\.tmp\/w1/);
+        const report = await readFile(path.join(dir, 'report.md'), 'utf-8');
+        assert.match(report, /crops\/01-element-header\.png/);
+        assert.doesNotMatch(report, /\.tmp\/w1/);
+    } finally {
+        await cleanup();
+    }
+});
+
+test('a crop that is not there keeps its old path', async () => {
+    const { root, cleanup } = await workspace();
+    try {
+        const state = {
+            root,
+            config: { output: { dir: './measurements' } },
+            sheet: SHEET,
+            crops: [{ kind: 'element', name: 'Gone', crop: '.tmp/w1/crops/gone.png' }],
+            conclusion: null,
+            warnings: [],
+        };
+        await runResolve(state, () => {});
+        const measurements = JSON.parse(await readFile(path.join(root, 'measurements', 'measurements.json'), 'utf-8'));
+        assert.equal(measurements.crops[0].crop, '.tmp/w1/crops/gone.png');
+        assert.ok(state.warnings.length >= 1);
+    } finally {
+        await cleanup();
+    }
+});
+
 test('the palette holds the colours of the sheet with their tokens', () => {
     const palette = buildPalette(SHEET);
     assert.equal(palette.colors.length, 1);

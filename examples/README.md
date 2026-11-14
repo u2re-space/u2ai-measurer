@@ -6,7 +6,7 @@ A run of the measurer over `landing.png`, and the pieces you can copy.
 |------|------------|
 | `landing.png`, `landing.jpg` | The reference picture: an agency landing page, 1024×768. |
 | `measurements.json` | The measurement sheet of that picture: the canvas, the elements, the regions, the rules, the palette. |
-| `crops/` | The fragments the harness cut out of the boxes of the sheet. |
+| `crops/` | The fragments the harness cut out of the boxes of the sheet. The paths of the sheet point at these files. |
 | `skills/house-style/` | An example skill pack. Copy the directory into `~/.ai-measure/skills/` and the measurer and the designer read it. |
 
 Reproduce the run:

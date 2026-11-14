@@ -9,6 +9,7 @@
  *   - `tokens.css` — the colours and the repeated measures as CSS custom properties;
  *   - `DESIGN.md` — the same tokens as a document a person reads;
  *   - `report.md` — what was measured, what is uncertain and which crops exist.
+ *   - `crops/` — the fragments themselves, copied out of the work directory.
  *
  * Every number in these files comes from the sheet. Nothing is invented here: a value the
  * measurer did not measure does not become a token.
@@ -16,14 +17,15 @@
  * @depends node:path, node:fs/promises, stages/crop
  * @usedBy shared/pipeline
  * @exports runResolve, buildPalette, buildTokens, buildDesignMd, buildReport,
- *          MEASUREMENTS_FILE, PALETTE_FILE, TOKENS_FILE, DESIGN_MD_FILE, REPORT_FILE
+ *          collectCrops, repointCrops, MEASUREMENTS_FILE, PALETTE_FILE, TOKENS_FILE,
+ *          DESIGN_MD_FILE, REPORT_FILE, CROPS_DIR
  * @ai.tags output, tokens, palette
  * @ai.hint io
  * @ai.hint legacy-0.2
  */
 
 import path from 'node:path';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { cp, mkdir, writeFile } from 'node:fs/promises';
 import { cropSlug } from './crop.js';
 import { toPosix } from '../agent/paths.js';
 
@@ -33,6 +35,75 @@ export const PALETTE_FILE = 'palette.json';
 export const TOKENS_FILE = 'tokens.css';
 export const DESIGN_MD_FILE = 'DESIGN.md';
 export const REPORT_FILE = 'report.md';
+/** The directory of the crops, next to the artifacts: the sheet and the crops travel together. */
+export const CROPS_DIR = 'crops';
+
+/**
+ * Copy the crops next to the artifacts.
+ *
+ * The crops are cut into the work directory, which is scratch: it is wiped and it is not part
+ * of the delivery. The artifacts are the delivery, so the crops are copied into the output
+ * directory and the sheet is pointed at the copies. A crop that cannot be copied keeps its old
+ * path — a missing file is better than a wrong path.
+ * @param {string} root the working directory
+ * @param {string} target the output directory
+ * @param {object[]} crops the crops of the stage
+ * @param {string[]} [warnings] the warnings of the run
+ * @returns {Promise<{ crops: object[], map: Map<string, string> }>}
+ * @exports
+ * @ai.hint io
+ */
+export async function collectCrops(root, target, crops = [], warnings = []) {
+    const map = new Map();
+    if (!Array.isArray(crops) || !crops.length) return { crops: [], map };
+    const dir = path.join(target, CROPS_DIR);
+    const copied = [];
+    for (const item of crops) {
+        const source = toPosix(String(item?.crop ?? ''));
+        if (!source) continue;
+        const from = path.resolve(root, source);
+        const name = path.basename(from);
+        const to = path.join(dir, name);
+        try {
+            await mkdir(dir, { recursive: true });
+            await cp(from, to, { force: true });
+        } catch (error) {
+            warnings.push(`resolve: the crop ${source} was not copied (${error?.message ?? error})`);
+            copied.push(item);
+            continue;
+        }
+        const rel = toPosix(path.join(CROPS_DIR, name));
+        map.set(source, rel);
+        copied.push({ ...item, crop: rel });
+    }
+    return { crops: copied, map };
+}
+
+/**
+ * Point the crop paths of a sheet at the copies.
+ * @param {object} sheet the measurement sheet
+ * @param {Map<string, string>} map the old path and the new one
+ * @returns {object} a new sheet
+ * @exports
+ * @ai.hint pure
+ */
+export function repointCrops(sheet, map) {
+    if (!sheet || !(map instanceof Map) || !map.size) return sheet;
+    const one = (item) => {
+        const crop = toPosix(String(item?.crop ?? ''));
+        const next = map.get(crop);
+        return next && next !== crop ? { ...item, crop: next } : item;
+    };
+    const conclusion = sheet.conclusion && Array.isArray(sheet.conclusion.crops)
+        ? { ...sheet.conclusion, crops: sheet.conclusion.crops.map(one) }
+        : sheet.conclusion;
+    return {
+        ...sheet,
+        elements: Array.isArray(sheet.elements) ? sheet.elements.map(one) : sheet.elements,
+        regions: Array.isArray(sheet.regions) ? sheet.regions.map(one) : sheet.regions,
+        conclusion,
+    };
+}
 
 /**
  * A token name a person can read: Latin letters, digits and dashes.
@@ -305,20 +376,26 @@ export async function runResolve(state, notify = () => {}) {
     const target = path.resolve(root, outDir);
     await mkdir(target, { recursive: true });
 
-    const palette = buildPalette(sheet);
-    const { css, tokens } = buildTokens(sheet, palette);
-    const designMd = buildDesignMd(sheet, palette);
-    const report = buildReport(sheet, { crops, conclusion });
+    // The crops travel with the artifacts: the work directory is scratch, the output is the
+    // delivery.
+    const gathered = await collectCrops(root, target, crops, state.warnings ?? []);
+    const pointed = repointCrops({ ...(sheet ?? {}), conclusion: conclusion ?? null }, gathered.map);
+    const pointedConclusion = pointed.conclusion ?? null;
+
+    const palette = buildPalette(pointed);
+    const { css, tokens } = buildTokens(pointed, palette);
+    const designMd = buildDesignMd(pointed, palette);
+    const report = buildReport(pointed, { crops: gathered.crops, conclusion: pointedConclusion });
 
     const measurements = {
-        ...(sheet ?? {}),
-        crops: crops.map((item) => ({
+        ...(pointed ?? {}),
+        crops: gathered.crops.map((item) => ({
             kind: String(item?.kind ?? ''),
             name: String(item?.name ?? ''),
             crop: toPosix(String(item?.crop ?? '')),
             box: item?.box ?? null,
         })),
-        conclusion: conclusion ?? null,
+        conclusion: pointedConclusion,
         generatedBy: 'ai-measure',
     };
 

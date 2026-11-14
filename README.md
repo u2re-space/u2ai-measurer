@@ -177,8 +177,11 @@ The artifacts land in `output.dir` (default `./measurements`):
 | `tokens.css` | The colours and the repeated measures as CSS custom properties. |
 | `DESIGN.md` | The same tokens as a document a person reads. |
 | `report.md` | What was measured, how certain it is and which crops exist. |
+| `crops/` | The fragments themselves: `NN-element-header.png`, `NN-region-logo.png`. |
 
-The crops are PNG files in `.tmp/<id>/crops/`: `NN-element-header.png`, `NN-region-logo.png`.
+The crops are cut into the work directory `.tmp/<id>/crops/` and copied next to the artifacts,
+so the delivery is self-contained: the sheet, the report and the pictures travel together. The
+paths inside `measurements.json` and `report.md` point at the copies.
 
 ### What the measurer measures
 
