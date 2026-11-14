@@ -21,6 +21,7 @@ import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { rasterInfo, rasterCrop, rasterSplit } from '../image/sharp.js';
 import { sampleColors, contrastRatio } from '../image/colors.js';
+import { describeColor as describeCssColor } from '../image/color-space.js';
 import { clampRect } from '../image/crop.js';
 import { toolSpecs as buildSpecs } from './tool-specs.js';
 import { isInside, resolveInside, toPosix } from './paths.js';
@@ -318,6 +319,29 @@ export function createToolset({ root, config, role = null, mcp = [], writeDirs =
                     `  colour space: ${result.colorSpace?.working ?? 'sRGB'} — ${result.colorSpace?.assumption ?? ''}`,
                     ...result.warnings,
                 ].filter(Boolean).join('\n');
+            }
+            case 'parse_color': {
+                const value = String(args.color ?? '').trim();
+                if (!value) return 'The colour is empty.';
+                const against = String(args.against ?? '').trim();
+                const described = describeCssColor(value, { against: against || null });
+                if (!described) return `Not a CSS colour: ${value}`;
+                const lines = [
+                    `Colour ${described.color}:`,
+                    `  hex: ${described.hex}${described.alpha < 1 ? ` (alpha ${described.alpha})` : ''}`,
+                    `  rgb: ${described.rgb}`,
+                    `  hsl: ${described.hsl}`,
+                    `  hwb: ${described.hwb}`,
+                    `  oklab: ${described.oklab}`,
+                    `  oklch: ${described.oklch}`,
+                    `  lab: ${described.lab}`,
+                    `  lch: ${described.lch}`,
+                    `  display-p3: ${described.p3}`,
+                    `  luminance: ${described.luminance}`,
+                    described.contrast != null ? `  contrast against ${described.against}: ${described.contrast}:1` : null,
+                    `  ${described.note}`,
+                ].filter(Boolean);
+                return lines.join('\n');
             }
             case 'list_files': {
                 const located = await resolveInside(root, String(args.path ?? '.'), { allowRoot: true });

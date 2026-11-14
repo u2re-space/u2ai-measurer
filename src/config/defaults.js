@@ -83,6 +83,8 @@ export const defaults = {
     image_crop: true,
     image_split: true,
     image_sample: true,
+    /** Read a CSS colour and return it in every notation. */
+    color_parse: true,
     /** Call the external `ai-image` CLI. */
     external_image: true,
     /** Call the external `ai-decompose` CLI. */

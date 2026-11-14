@@ -102,6 +102,24 @@ export const TOOL_SPECS = Object.freeze({
         required: ['path'],
         roles: ['measurer', 'designer'],
     },
+    parse_color: {
+        configKey: 'color_parse',
+        description: 'Read a CSS colour and return it in every notation: hex, rgb, hsl, hwb, oklab, oklch, lab, lch, '
+            + 'Display-P3 and XYZ, with its luminance and its WCAG contrast against a second colour. '
+            + 'Use it when a colour arrives as text (a mockup quote, a design token, a stylesheet value) '
+            + 'and the sheet has to carry the exact value in every notation.',
+        parameters: {
+            type: 'object',
+            properties: {
+                color: str('The colour as CSS writes it: #f1463f, rgb(241 70 63), hsl(2 86% 60%), oklch(0.64 0.21 27), a named colour.'),
+                against: str('A second colour to measure the WCAG contrast against. Empty = only the notations.'),
+            },
+            required: ['color'],
+            additionalProperties: false,
+        },
+        required: ['color'],
+        roles: ['measurer', 'designer'],
+    },
     list_files: {
         configKey: 'list',
         description: 'List the files of a directory of the working directory.',

@@ -193,6 +193,14 @@
 - [x] `src/config/defaults.js` — `measurerMaxTurns: 16`, `stages.measure.maxTurns: 16`
 - [x] `test/roles.test.js`, `test/stages.test.js`
 
+### step-19 — Цвета: culori
+- [x] `package.json` — зависимость `culori`
+- [x] `src/image/color-space.js` — разбор любого CSS-цвета, все нотации (hex, rgb, hsl, hwb,
+      oklab, oklch, lab, lch, Display-P3, XYZ), контраст WCAG, CIEDE2000, приведение к sRGB
+- [x] `src/agent/tool-specs.js`, `src/agent/tools.js` — инструмент `parse_color`
+- [x] `src/config/defaults.js` — выключатель `tools.color_parse`
+- [x] `test/color-space.test.js`
+
 ---
 
 ## 2. Правила работы
