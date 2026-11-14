@@ -132,6 +132,9 @@ The log of a run says what happens, not only that something happens:
 
 `--verbose` prints the whole answer of every tool instead of the short summary.
 
+A run that dies says so: an unhandled rejection and an uncaught exception are printed, so an empty
+terminal is never the only sign of a failure.
+
 ### Exit codes
 
 | Code | Meaning |

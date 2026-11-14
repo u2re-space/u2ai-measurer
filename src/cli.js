@@ -302,6 +302,18 @@ async function commandSkills(config) {
  * @ai.hint io
  */
 export async function main(argv = process.argv.slice(2)) {
+    // A run that dies must say so.
+    //
+    // A thinking model works for minutes, and the process may be killed or may fall over
+    // somewhere deep inside the transport. Without this the terminal stays empty and the exit
+    // code is the only witness: a silent death is the hardest kind of failure to read.
+    process.on('unhandledRejection', (reason) => {
+        console.error(`Unhandled rejection: ${reason?.message ?? reason}`);
+    });
+    process.on('uncaughtException', (error) => {
+        console.error(`Uncaught exception: ${error?.message ?? error}`);
+    });
+
     const opts = parseArgv(argv);
     if (opts.help) {
         console.log(HELP);
