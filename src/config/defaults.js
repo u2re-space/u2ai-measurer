@@ -232,7 +232,7 @@ export const defaults = {
       /** local: the harness reads the pixels, the model only names the colours. ai: the model samples itself. */
       mode: 'local',
       /** The effort of the local mode: the colours are read by the harness, the model only names them. */
-      localEffort: 'medium',
+      localEffort: 'high',
       /** The effort of the ai mode: the model reads the pixels itself and has to be sharp. */
       aiEffort: 'high',
       /** Max agent turns the sampler may spend. */
