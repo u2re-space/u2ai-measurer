@@ -25,7 +25,7 @@ import { mkdir } from 'node:fs/promises';
 import { rasterCrop, rasterInfo } from '../image/sharp.js';
 import { clampRect } from '../image/crop.js';
 import { CROP_PLAN_SCHEMA } from '../agent/schemas.js';
-import { attachReference, attachmentBlock, splitReferences } from './references.js';
+import { attachReference, attachmentBlock, pictureBlock, splitReferences } from './references.js';
 import { CROPS_DIR, cropSlug, readStageFile, scaleBox, writeStageFile } from './artifacts.js';
 
 /**
@@ -198,8 +198,7 @@ async function askCropper({ root, workId, config, runner, references, segmentati
         const text = [
             attachmentBlock([{ rel: item.rel, role: item.kind === 'subref' ? 'sub-reference' : 'original' }]),
             '',
-            '# Work directory',
-            `.tmp/${workId}/`,
+            pictureBlock(attached),
             '',
             'Name the fragments of this picture that are worth cutting out.',
         ].join('\n');
@@ -211,6 +210,7 @@ async function askCropper({ root, workId, config, runner, references, segmentati
             maxTurns,
             effort: config?.stages?.crop?.effort ?? null,
             signal,
+            stage: 'crop',
         });
         if (answer.error) {
             warnings.push(`The cropper failed on ${item.rel}: ${answer.error}`);

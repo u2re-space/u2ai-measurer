@@ -9,8 +9,8 @@
  *   - the originals that produced a sub-reference stay out of the picture, they are paths.
  *
  * @depends node:path, image/sharp, openai/responses
- * @usedBy stages/measure, stages/segmentate, stages/recognize, stages/cropper
- * @exports attachReference, attachImage, attachmentBlock, splitReferences
+ * @usedBy stages/measure, stages/segmentate, stages/recognize, stages/cropper, stages/sample
+ * @exports attachReference, attachImage, attachmentBlock, pictureBlock, splitReferences
  * @ai.tags stage, references, vision
  * @ai.hint io
  */
@@ -82,6 +82,26 @@ export function attachmentBlock(attachments = []) {
     return attachments
         .map((item, index) => `Attached image ${index + 1}: ${item.rel} (${item.role})`)
         .join('\n');
+}
+
+/**
+ * The block that tells the model where the pictures of the run are.
+ *
+ * The paths are exact: the model opens the picture by them. A block that only names the working
+ * directory invites a guess, and a guessed path is a picture that is not there.
+ * @param {Array<{ rel: string, kind?: string }>} references
+ * @returns {string}
+ * @exports
+ * @ai.hint pure
+ */
+export function pictureBlock(references = []) {
+    const list = Array.isArray(references) ? references : [];
+    if (!list.length) return '';
+    return [
+        '# Pictures',
+        'These paths are exact — open the pictures by them, do not look for them anywhere else:',
+        ...list.map((item) => `- ${item?.rel ?? ''}${item?.kind === 'subref' ? ' (sub-reference)' : ''}`),
+    ].join('\n');
 }
 
 /**

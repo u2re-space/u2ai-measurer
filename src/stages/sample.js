@@ -24,7 +24,7 @@ import path from 'node:path';
 import { PALETTE_SCHEMA } from '../agent/schemas.js';
 import { sampleColors } from '../image/colors.js';
 import { capEffort } from '../model/profiles.js';
-import { attachImage, attachmentBlock, splitReferences } from './references.js';
+import { attachImage, attachmentBlock, pictureBlock, splitReferences } from './references.js';
 import { readStageFile, writeStageFile } from './artifacts.js';
 
 /** How many zones of one source are sampled in the local mode. */
@@ -224,7 +224,7 @@ export async function runSampleStage({
         lines.push(colorLines(samples));
         lines.push('');
     }
-    lines.push('# Work directory', `.tmp/${workId}/`, '');
+    lines.push('', pictureBlock(pictures.map((item) => ({ rel: item.rel, kind: item.kind }))), '');
     lines.push(mode === 'ai'
         ? 'Read the colours of the picture and name them. Sample the areas you need with the tool.'
         : 'Name the colours above. Keep every hex exactly as it is written.');
@@ -237,6 +237,7 @@ export async function runSampleStage({
         maxTurns,
         effort: stageEffort,
         signal,
+        stage: 'sample',
     });
     if (answer.error) {
         warnings.push(`The sampler failed: ${answer.error}`);

@@ -19,7 +19,7 @@
 
 import path from 'node:path';
 import { RECOGNITION_SCHEMA } from '../agent/schemas.js';
-import { attachImage, attachmentBlock, splitReferences } from './references.js';
+import { attachImage, attachmentBlock, pictureBlock, splitReferences } from './references.js';
 import { cropRelPath, readStageFile, writeStageFile } from './artifacts.js';
 
 /** How many fragments one call may carry. */
@@ -99,8 +99,7 @@ export async function runRecognizeStage({
             '# Zones with text',
             zones.map((zone) => `- ${String(zone?.name ?? '')} (${String(zone?.role ?? '')})`).join('\n'),
             '',
-            '# Work directory',
-            `.tmp/${workId}/`,
+            pictureBlock(attached),
             '',
             'Read the texts of these zones and the typography they use.',
         ];
@@ -112,6 +111,7 @@ export async function runRecognizeStage({
             maxTurns,
             effort: config?.stages?.recognize?.effort ?? null,
             signal,
+            stage: 'recognize',
         });
         if (answer.error) {
             warnings.push(`The recognizer failed on ${source}: ${answer.error}`);

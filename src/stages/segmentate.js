@@ -19,7 +19,7 @@
  */
 
 import { SEGMENTATION_SCHEMA } from '../agent/schemas.js';
-import { attachReference, attachmentBlock, splitReferences } from './references.js';
+import { attachReference, attachmentBlock, pictureBlock, splitReferences } from './references.js';
 import { scaleBox, writeStageFile } from './artifacts.js';
 
 /**
@@ -58,8 +58,7 @@ export async function runSegmentStage({
         const text = [
             attachmentBlock([{ rel: item.rel, role: item.kind === 'subref' ? 'sub-reference' : 'original' }]),
             '',
-            '# Work directory',
-            `.tmp/${workId}/`,
+            pictureBlock(attached),
             '',
             'Split this picture into zones. Give the box of every zone and nothing else.',
         ].join('\n');
@@ -71,6 +70,7 @@ export async function runSegmentStage({
             maxTurns,
             effort: config?.stages?.segmentate?.effort ?? null,
             signal,
+            stage: 'segmentate',
         });
         if (answer.error) {
             warnings.push(`The segmentator failed on ${item.rel}: ${answer.error}`);

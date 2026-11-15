@@ -179,6 +179,7 @@ export async function runDesignStage({
         maxTurns,
         effort: config?.stages?.design?.effort ?? null,
         signal,
+        stage: 'design',
     });
 
     if (answer.error) {

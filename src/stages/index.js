@@ -38,7 +38,21 @@ async function noteStageFile(state, notify, file) {
     const rel = path.relative(state.root, file).split(path.sep).join('/');
     const bytes = await stat(file).then((info) => info.size).catch(() => 0);
     state.artifacts.push(rel);
+    // The context knows what the run wrote: the stages after it and the reader start from there.
+    await state.context?.file?.(rel);
     notify?.({ type: 'artifact', file: rel, bytes });
+}
+
+/**
+ * Remember what a stage did: the stages after it and the reader start from that.
+ * @param {object} state the pipeline state
+ * @param {string} id the id of the stage
+ * @param {string} summary what the stage did, in one sentence
+ * @returns {Promise<void>}
+ * @ai.hint io
+ */
+async function noteStage(state, id, summary) {
+    await state.context?.stage?.(id, 'done', summary);
 }
 
 /**
@@ -62,6 +76,7 @@ async function designStage(state, notify) {
     });
     state.design = result.design;
     state.warnings.push(...result.warnings);
+    await noteStage(state, 'design', 'The design direction is written.');
 }
 
 /**
@@ -84,6 +99,7 @@ async function measureStage(state, notify) {
     });
     state.geometry = result.geometry;
     state.warnings.push(...result.warnings);
+    await noteStage(state, 'measure', `${result.geometry?.sources?.length ?? 0} source(s) measured.`);
     await noteStageFile(state, notify, result.file);
 }
 
@@ -107,6 +123,7 @@ async function recognizeStage(state, notify) {
     });
     state.recognition = result.recognition;
     state.warnings.push(...result.warnings);
+    await noteStage(state, 'recognize', `${result.recognition?.sources?.length ?? 0} source(s) read.`);
     await noteStageFile(state, notify, result.file);
 }
 
@@ -130,6 +147,7 @@ async function segmentateStage(state, notify) {
     });
     state.segmentation = result.segmentation;
     state.warnings.push(...result.warnings);
+    await noteStage(state, 'segmentate', `${result.segmentation?.sources?.length ?? 0} source(s) segmented.`);
     await noteStageFile(state, notify, result.file);
 }
 
@@ -153,6 +171,7 @@ async function cropStage(state, notify) {
     });
     state.crops = result.crops;
     state.warnings.push(...result.warnings);
+    await noteStage(state, 'crop', `${result.crops?.length ?? 0} fragment(s) cut.`);
     await noteStageFile(state, notify, result.file);
 }
 
@@ -177,6 +196,7 @@ async function sampleStage(state, notify) {
     });
     state.palette = result.palette;
     state.warnings.push(...result.warnings);
+    await noteStage(state, 'sample', `${result.palette?.colors?.length ?? 0} colour(s) named.`);
     await noteStageFile(state, notify, result.file);
 }
 

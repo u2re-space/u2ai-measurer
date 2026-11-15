@@ -20,7 +20,7 @@
 
 import path from 'node:path';
 import { GEOMETRY_SCHEMA } from '../agent/schemas.js';
-import { attachReference, attachmentBlock, splitReferences } from './references.js';
+import { attachReference, attachmentBlock, pictureBlock, splitReferences } from './references.js';
 import { cropRelPath, readStageFile, writeStageFile } from './artifacts.js';
 
 /**
@@ -116,7 +116,7 @@ export async function runMeasureStage({
                 .map((crop) => `- ${cropRelPath({ root, outDir, crop: crop.crop })} — ${crop.kind} "${crop.name}"`)
                 .join('\n'));
         }
-        lines.push('', '# Work directory', `.tmp/${workId}/`, '');
+        lines.push('', pictureBlock(attached), '');
         lines.push('Measure the geometry of these zones. Give the numbers of the zones that carry them.');
 
         const answer = await runner.run('measurer', {
@@ -127,6 +127,7 @@ export async function runMeasureStage({
             maxTurns,
             effort: config?.stages?.measure?.effort ?? null,
             signal,
+            stage: 'measure',
         });
         if (answer.error) {
             warnings.push(`The measurer failed on ${source}: ${answer.error}`);

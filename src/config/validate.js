@@ -134,6 +134,42 @@ function validateAgent(agent, fail) {
 }
 
 /**
+ * Validate the `context` section: the context of a run.
+ * @param {object} section
+ * @param {(message: string) => never} fail
+ */
+function validateContext(section, fail) {
+  const where = 'context';
+  if (!isRecord(section)) fail(`${where} должен быть объектом`);
+  for (const key of Object.keys(section)) {
+    if (!(key in defaults.context)) fail(`${where}.${key}: неизвестное поле (допустимо: ${Object.keys(defaults.context).join(', ')})`);
+  }
+  for (const key of ['enabled', 'cache']) {
+    if (key in section && typeof section[key] !== 'boolean') fail(`${where}.${key}: true | false`);
+  }
+  if ('maxBriefChars' in section && !(Number.isSafeInteger(section.maxBriefChars) && section.maxBriefChars > 0)) {
+    fail(`${where}.maxBriefChars: положительное целое`);
+  }
+}
+
+/**
+ * Validate the `map` section: the map of a run.
+ * @param {object} section
+ * @param {(message: string) => never} fail
+ */
+function validateMap(section, fail) {
+  const where = 'map';
+  if (!isRecord(section)) fail(`${where} должен быть объектом`);
+  for (const key of Object.keys(section)) {
+    if (!(key in defaults.map)) fail(`${where}.${key}: неизвестное поле (допустимо: ${Object.keys(defaults.map).join(', ')})`);
+  }
+  if ('enabled' in section && typeof section.enabled !== 'boolean') fail(`${where}.enabled: true | false`);
+  for (const key of ['depth', 'maxFiles', 'maxFileBytes', 'maxLines']) {
+    if (key in section && !(Number.isSafeInteger(section[key]) && section[key] > 0)) fail(`${where}.${key}: положительное целое`);
+  }
+}
+
+/**
  * Throw when any merged value is outside the accepted enums and ranges.
  * @param {object} config
  * @returns {void}
@@ -217,6 +253,9 @@ export function validateConfig(config) {
   if (!(Number.isFinite(c.image.alphaThreshold) && c.image.alphaThreshold >= 0 && c.image.alphaThreshold <= 1)) fail('image.alphaThreshold: 0..1');
 
   validateAgent(c.agent, fail);
+
+  validateContext(c.context, fail);
+  validateMap(c.map, fail);
 
   if (!isRecord(c.stages)) fail('stages должен быть объектом');
   for (const key of Object.keys(c.stages)) {

@@ -7,21 +7,24 @@
  * stage. The crops are cut inside the measurement stage, so there is no separate crop stage.
  *
  * @depends node:path, node:fs/promises, node:crypto, roles/index, agent/tools, agent/skills,
- *          agent/mcp, stages/index
+ *          agent/mcp, agent/context, agent/run-map, stages/index
  * @usedBy cli
  * @exports STAGES, runPipeline, runStages, newWorkId, stageReferences
  * @ai.tags pipeline, stages
  * @ai.hint keep
  * @ai.hint legacy-0.2
+ * @changed 2026-11-15 The run keeps a context of its own and a map of its files.
  */
 
 import path from 'node:path';
 import { mkdir, stat, cp } from 'node:fs/promises';
 import { randomBytes } from 'node:crypto';
-import { createRoleRunner } from '../roles/index.js';
+import { createRoleRunner, resolveRole } from '../roles/index.js';
 import { createToolset } from '../agent/tools.js';
 import { loadSkills } from '../agent/skills.js';
 import { connectMcpServers } from '../agent/mcp.js';
+import { openContext } from '../agent/context.js';
+import { openRunMap } from '../agent/run-map.js';
 import { STAGE_DEFS, STAGE_DIRS, STAGE_ROLES, shouldRunDesign } from '../stages/index.js';
 import { MEASUREMENTS_FILE } from '../stages/resolve.js';
 import { isInside, toPosix } from '../agent/paths.js';
@@ -157,23 +160,6 @@ export async function runPipeline({
         }
     }
 
-    // One toolset for the whole run: the stages open the directories a role may write into, and
-    // the role runner executes the calls with the very same executor.
-    const toolset = createToolset({ root, config, mcp });
-
-    const roles = createRoleRunner({
-        client,
-        config,
-        model,
-        // The effort of the run is a ceiling, not a setting: a stage asks for the effort it
-        // needs, and the promise of the user about the money lowers it.
-        effort: null,
-        ceiling: effort,
-        toolset,
-        skills,
-        onEvent: (event) => notify({ type: 'api', ...event }),
-    });
-
     // The stages that run in this configuration.
     //
     // A stage the user named on the command line runs: the gate of `agent.design` decides
@@ -205,7 +191,7 @@ export async function runPipeline({
             type: 'plan',
             references: references.map((item) => item.rel),
             stages: toRun.map((stage) => {
-                const role = stage.role ? roles.resolve(stage.role) : null;
+                const role = stage.role ? resolveRole(config, stage.role) : null;
                 return { id: stage.id, label: stage.label, model: role?.model ?? null };
             }),
             outputs: [
@@ -217,7 +203,50 @@ export async function runPipeline({
         return { output: null, warnings, failed: false, workId: id, artifacts: [] };
     }
 
-    if (!dryRun) await mkdir(workDir, { recursive: true });
+    await mkdir(workDir, { recursive: true });
+
+    // The context of the run: what it did, what it decided and the answers it already has.
+    //
+    // The context is the primary knowledge of the run. The permanent memory of the project is a
+    // different thing: a new run starts with a clean head, and an old run never gets in the way.
+    const context = await openContext({
+        root,
+        workId: id,
+        enabled: config?.context?.enabled !== false,
+        cache: config?.context?.cache !== false,
+        maxBriefChars: config?.context?.maxBriefChars,
+    });
+    await context.references(references.map((item) => ({ rel: item.rel, kind: item.kind })));
+
+    // The map of the run: the files of the working directory, with their lines and their symbols.
+    // The searches and the reads of the files the map knows do not touch the disk.
+    const map = await openRunMap({
+        root,
+        workId: id,
+        build: config?.map?.enabled !== false,
+        depth: config?.map?.depth,
+        maxFiles: config?.map?.maxFiles,
+        maxFileBytes: config?.map?.maxFileBytes,
+        maxLines: config?.map?.maxLines,
+    });
+
+    // One toolset for the whole run: the stages open the directories a role may write into, and
+    // the role runner executes the calls with the very same executor.
+    const toolset = createToolset({ root, config, mcp, context, map });
+
+    const roles = createRoleRunner({
+        client,
+        config,
+        model,
+        // The effort of the run is a ceiling, not a setting: a stage asks for the effort it
+        // needs, and the promise of the user about the money lowers it.
+        effort: null,
+        ceiling: effort,
+        toolset,
+        skills,
+        context,
+        onEvent: (event) => notify({ type: 'api', ...event }),
+    });
 
     const state = {
         root,
@@ -234,6 +263,8 @@ export async function runPipeline({
         task,
         signal,
         toolset,
+        context,
+        map,
         references,
         design: null,
         segmentation: null,
@@ -248,6 +279,11 @@ export async function runPipeline({
     };
 
     const failed = await runStages(toRun, state, notify);
+
+    // The digest of the run: what a person reads after it. The context of the run is the
+    // witness of what happened, and it dies with the run.
+    await context.digest().catch(() => {});
+    await context.close().catch(() => {});
 
     for (const connection of mcp) await connection.close().catch(() => {});
 

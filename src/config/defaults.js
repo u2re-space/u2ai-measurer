@@ -112,6 +112,44 @@ export const defaults = {
     external_decompose: true,
   },
 
+  // --- context of the run ----------------------------------------------------
+  /**
+   * The context of a run: what it did, what it decided and the answers it already has.
+   *
+   * The context lives in `.tmp/<id>/context/` and dies with the run. It is the primary knowledge
+   * of a run: a new run starts with a clean head, and an old run never gets in the way of a new
+   * one. The permanent memory of the project is a different thing — this is what *this* run knows.
+   */
+  context: {
+    /** Keep the context of the run. */
+    enabled: true,
+    /** Remember the answers of the tools, so nobody asks the same thing twice. */
+    cache: true,
+    /** How long the brief of the context may be, in characters. */
+    maxBriefChars: 4000,
+  },
+
+  // --- map of the run --------------------------------------------------------
+  /**
+   * The map of a run: the index of the files of the working directory, with their lines and their
+   * symbols. The searches and the reads of the files the map knows do not touch the disk.
+   *
+   * The map lives in `.tmp/<id>/map.json` and dies with the run: a new run builds a new map, and
+   * nothing of the old one leaks into it.
+   */
+  map: {
+    /** Build and keep the map of the run. */
+    enabled: true,
+    /** How deep the map walks into the directories. */
+    depth: 8,
+    /** How many files the map holds. */
+    maxFiles: 2000,
+    /** The biggest file the map reads in full; a bigger one is searched on the disk. */
+    maxFileBytes: 32 * 1024,
+    /** The most lines the map keeps of one file; a longer one is searched on the disk. */
+    maxLines: 400,
+  },
+
   // --- raster ----------------------------------------------------------------
   raster: {
     /** sharp -> canvas -> ImageMagick fallback chain. */

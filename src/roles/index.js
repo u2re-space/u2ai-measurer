@@ -20,6 +20,7 @@
  * @ai.tags roles
  * @ai.hint keep
  * @ai.hint legacy-0.2
+ * @changed 2026-11-15 The roles read the brief of the context and their answers go into it.
  */
 import { instructions as measurerInstructions } from './measurer.js';
 import { instructions as cropperInstructions } from './cropper.js';
@@ -146,27 +147,35 @@ export function resolveRole(config, name, { model = null, effort = null, ceiling
 
 /**
  * Create a role runner bound to a client.
+ *
+ * The context of the run is handed to every role: the brief of the context goes into the
+ * instructions, so a role knows what the run already knows — the exact paths of the pictures,
+ * the stages that are done, the decisions that were made — and the answers of the role go back
+ * into the context, so the next role does not ask again.
  * @param {{ client: object, config?: object, model?: string|null, effort?: string|null,
- *   ceiling?: string|null, toolset?: object|null, skills?: object|null, onEvent?: Function|null }} opts
+ *   ceiling?: string|null, toolset?: object|null, skills?: object|null, context?: object|null,
+ *   onEvent?: Function|null }} opts
  *   `skills` maps a role name to the text of its skill pack.
  *   `effort` is the effort a role gets when it does not ask for one; `ceiling` is the promise
  *   the user made about the money of the run — it lowers the effort, never raises it.
  * @returns {{ run: Function, resolve: Function }}
  */
-export function createRoleRunner({ client, config = {}, model = null, effort = null, ceiling = null, toolset = null, skills = null, onEvent = null } = {}) {
+export function createRoleRunner({ client, config = {}, model = null, effort = null, ceiling = null, toolset = null, skills = null, context = null, onEvent = null } = {}) {
     /**
      * Run one role.
      * @param {string} name role name
      * @param {{ text: string, parts?: object[], instructions?: string|null, schema?: object|null,
      *   schemaName?: string|null, schemaMode?: 'auto'|'tool'|'separate', maxTurns?: number,
      *   model?: string|null, effort?: string|null, ceiling?: string|null,
-     *   signal?: AbortSignal|null, extraTools?: object[], withDocumentation?: boolean }} [params]
+     *   signal?: AbortSignal|null, extraTools?: object[], withDocumentation?: boolean,
+     *   stage?: string|null }} [params]
      * @returns {Promise<{ status: string, data: object|null, text: string, toolCalls: object[], usage: object|null, error: string|null, model: string|null, trace: object[] }>}
      */
     async function run(name, {
         text = '', parts = [], instructions = null, schema = null, schemaName = null,
         schemaMode = 'auto', maxTurns = 1, model: runModel = null, effort: runEffort = null,
         ceiling: runCeiling = null, signal = null, extraTools = null, withDocumentation = true,
+        stage = null,
     } = {}) {
         const role = resolveRole(config, name, {
             model: runModel ?? model,
@@ -194,10 +203,15 @@ export function createRoleRunner({ client, config = {}, model = null, effort = n
             ? 'plain'
             : (schemaMode === 'auto' ? (tools?.length ? 'separate' : 'tool') : schemaMode);
 
+        // The brief of the context: what this run already knows. The role does not have to
+        // rediscover the paths of the pictures or the decisions of the earlier stages.
+        const brief = typeof context?.brief === 'function' ? context.brief() : '';
+
         const baseInstructions = [
             instructions ?? role.instructions,
             docs,
             skillText,
+            brief,
         ].filter(Boolean).join('\n\n');
         if (!baseInstructions) {
             return {
@@ -345,6 +359,13 @@ export function createRoleRunner({ client, config = {}, model = null, effort = n
                 model: usedModel, trace,
             };
         }
+
+        // The answer of the role goes into the context: the next role builds on it instead of
+        // asking the model the same thing again.
+        const answerText = textOf(last?.text).trim()
+            || (last?.data ? JSON.stringify(last.data).slice(0, 2000) : '');
+        if (answerText) await context?.answer?.(answerText, { role: name, stage });
+        if (last?.error?.message) await context?.note?.(last.error.message, { role: name, stage });
 
         return {
             status: last?.status ?? 'completed',

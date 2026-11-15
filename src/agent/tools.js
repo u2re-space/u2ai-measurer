@@ -9,11 +9,12 @@
  * of the sibling package, the installed `node_modules`, and the `PATH`.
  *
  * @depends node:path, node:fs/promises, node:child_process, image/sharp, image/colors,
- *          agent/tool-specs, agent/paths
+ *          agent/tool-specs, agent/paths, agent/run-map
  * @exports createToolset, toolSpecs, enabledToolNames, resolveExternalCli, externalCliCandidates
  * @ai.tags tools, agent, external
  * @ai.hint keep
  * @ai.hint legacy-0.2
+ * @changed 2026-11-15 The map of the run and the cache of the context answer the tools.
  */
 import path from 'node:path';
 import { readFile, writeFile, mkdir, readdir, stat } from 'node:fs/promises';
@@ -25,8 +26,12 @@ import { describeColor as describeCssColor } from '../image/color-space.js';
 import { clampRect } from '../image/crop.js';
 import { toolSpecs as buildSpecs } from './tool-specs.js';
 import { isInside, resolveInside, toPosix } from './paths.js';
+import { mapFiles } from './run-map.js';
 
 export { toolSpecs, enabledToolNames } from './tool-specs.js';
+
+/** The tools whose answers are worth remembering: they read the same thing every time. */
+const CACHEABLE = new Set(['view_image', 'sample_colors', 'parse_color']);
 
 /** The root of this package: the sibling packages are looked up next to it. */
 const PACKAGE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -213,11 +218,16 @@ export function mcpToolEntries(connections = []) {
  *
  * Every path the model names is resolved inside the working directory, and every file the model
  * writes has to land in one of the directories the current stage opened for writing.
+ *
+ * The map of the run is the fast path: the search and the read of a file the map knows do not
+ * touch the disk. The context of the run is the memory: the answer of a question that was
+ * already asked comes from the cache, and every call is written into the journal.
  * @param {{ root: string, config: object, role?: string|null, mcp?: object[],
- *   writeDirs?: string[], env?: object, packageRoot?: string }} opts
+ *   writeDirs?: string[], env?: object, packageRoot?: string, context?: object|null,
+ *   map?: object|null }} opts
  * @returns {{ execute: (name: string, args: object) => Promise<string>, specs: object[], setWriteDirs: Function, writeDirs: Function }}
  */
-export function createToolset({ root, config, role = null, mcp = [], writeDirs = null, env = process.env, packageRoot = PACKAGE_ROOT }) {
+export function createToolset({ root, config, role = null, mcp = [], writeDirs = null, env = process.env, packageRoot = PACKAGE_ROOT, context = null, map = null }) {
     const mcpTools = mcpToolEntries(mcp);
     const mcpSpecs = mcpTools.map((entry) => ({
         type: 'function',
@@ -248,6 +258,78 @@ export function createToolset({ root, config, role = null, mcp = [], writeDirs =
             throw new Error(`Writing outside the output directory is forbidden: ${located.rel}`);
         }
         return located;
+    }
+
+    /**
+     * The answer to a file that is not there.
+     *
+     * The answer names the files the run really has: a model that is told where the picture is
+     * does not go looking for it in the working directory of the run.
+     * @param {string} requested the path the model named
+     * @returns {string}
+     * @ai.hint pure
+     */
+    function missingAnswer(requested) {
+        const references = Array.isArray(context?.state?.references) ? context.state.references : [];
+        const wanted = path.basename(String(requested ?? '')).toLowerCase();
+        const lines = [`There is no file at \`${requested}\`.`];
+        const same = references.find((item) => path.basename(String(item?.rel ?? '')).toLowerCase() === wanted);
+        if (same) {
+            lines.push(`The picture of this run is \`${same.rel}\` — open it by that path.`);
+            return lines.join('\n');
+        }
+        if (references.length) {
+            lines.push('The pictures of this run are:');
+            for (const item of references) lines.push(`- \`${item.rel}\``);
+            lines.push('These paths are exact — do not look for the pictures anywhere else.');
+            return lines.join('\n');
+        }
+        lines.push('Use `list_files` to see the files of the working directory.');
+        return lines.join('\n');
+    }
+
+    /**
+     * The text of a file, from the map of the run.
+     *
+     * The map is used only when the file has not changed since the map was built: the mtime of
+     * the file decides, so a stale map never lies.
+     * @param {string} rel the path of the file, relative to the root
+     * @returns {Promise<string|null>}
+     */
+    async function readFromMap(rel) {
+        if (!map?.enabled) return null;
+        const record = map.data?.files?.[rel];
+        if (!record || record.partial || !Array.isArray(record.lines)) return null;
+        const info = await stat(path.join(root, ...rel.split('/'))).catch(() => null);
+        if (!info?.isFile() || info.mtimeMs !== record.mtimeMs) return null;
+        return record.lines.join(record.eol ?? '\n');
+    }
+
+    /**
+     * The key of the cache of a call: the name of the tool, its arguments and the moment of
+     * the file it reads.
+     * @param {string} name
+     * @param {object} args
+     * @returns {Promise<string>}
+     */
+    async function cacheKeyOf(name, args) {
+        const parts = [name, JSON.stringify(args ?? {})];
+        const rel = String(args?.path ?? '');
+        if (rel) {
+            const info = await stat(path.resolve(root, rel)).catch(() => null);
+            parts.push(info?.mtimeMs ?? 'no-file');
+        }
+        return parts.join('|');
+    }
+
+    /**
+     * Index a file of the run in the map, so the next search finds it.
+     * @param {string} rel
+     * @returns {Promise<void>}
+     */
+    async function rememberInMap(rel) {
+        if (!map?.enabled || !rel) return;
+        await map.update(rel).catch(() => {});
     }
 
     /**
@@ -283,24 +365,53 @@ export function createToolset({ root, config, role = null, mcp = [], writeDirs =
             }
             return typeof result === 'string' ? result : JSON.stringify(result ?? null);
         }
+        // The answer of a question that was already asked comes from the cache of the run.
+        const key = CACHEABLE.has(name) ? await cacheKeyOf(name, args) : null;
+        if (key) {
+            const hit = await context?.cached?.(key);
+            if (hit?.answer) {
+                await context?.action?.(`${name} ${JSON.stringify(args ?? {})}`, { role });
+                return String(hit.answer);
+            }
+        }
+        const answer = await runTool(name, args);
+        if (key) await context?.put?.(key, { answer, at: new Date().toISOString() });
+        await context?.action?.(`${name} ${JSON.stringify(args ?? {})}`, { role });
+        return answer;
+    }
+
+    /**
+     * Run one tool of the catalogue.
+     * @param {string} name
+     * @param {object} args
+     * @returns {Promise<string>}
+     */
+    async function runTool(name, args = {}) {
         switch (name) {
             case 'view_image': {
                 const located = await readPath(args.path);
+                const exists = await stat(located.abs).then((info) => info.isFile()).catch(() => false);
+                if (!exists) return missingAnswer(located.rel);
                 const info = await rasterInfo(located.abs);
                 return `Image ${located.rel}: ${info.width}×${info.height} ${info.format ?? ''}`;
             }
             case 'crop_image': {
                 const located = await readPath(args.path);
+                const exists = await stat(located.abs).then((info) => info.isFile()).catch(() => false);
+                if (!exists) return missingAnswer(located.rel);
                 const parsed = path.parse(located.abs);
                 const fallback = path.join(parsed.dir, `${parsed.name}-crop.png`);
                 const target = await writePath(args.output ?? fallback);
                 const info = await rasterInfo(located.abs);
                 const box = clampRect(args, info);
                 await rasterCrop({ input: located.abs, output: target.abs, ...box });
+                await rememberInMap(target.rel);
                 return `Cropped to ${target.rel} (${box.width}×${box.height})`;
             }
             case 'split_image': {
                 const located = await readPath(args.path);
+                const exists = await stat(located.abs).then((info) => info.isFile()).catch(() => false);
+                if (!exists) return missingAnswer(located.rel);
                 const outDir = await writePath(args.outputDir ?? '.');
                 await mkdir(outDir.abs, { recursive: true });
                 const tiles = await rasterSplit({
@@ -310,10 +421,13 @@ export function createToolset({ root, config, role = null, mcp = [], writeDirs =
                     cols: Math.max(1, Number(args.cols) || 1),
                     baseName: 'tile',
                 });
+                await rememberInMap(outDir.rel);
                 return `Split into ${tiles.length} tiles in ${outDir.rel}`;
             }
             case 'sample_colors': {
                 const located = await readPath(args.path);
+                const exists = await stat(located.abs).then((info) => info.isFile()).catch(() => false);
+                if (!exists) return missingAnswer(located.rel);
                 const hasBox = Number.isFinite(Number(args.width)) && Number.isFinite(Number(args.height));
                 const box = hasBox
                     ? { x: Number(args.x) || 0, y: Number(args.y) || 0, width: Number(args.width), height: Number(args.height) }
@@ -369,6 +483,11 @@ export function createToolset({ root, config, role = null, mcp = [], writeDirs =
             case 'list_files': {
                 const located = await resolveInside(root, String(args.path ?? '.'), { allowRoot: true });
                 const depth = Math.max(1, Number(args.depth) || 1);
+                if (map?.enabled) {
+                    const relDir = toPosix(path.relative(root, located.abs)) || '.';
+                    const lines = mapFiles(map.data, { dir: relDir, depth }).slice(0, 500);
+                    return lines.length ? lines.join('\n') : '(no files)';
+                }
                 const files = await walk(located.abs, depth, []);
                 const lines = files
                     .map((file) => toPosix(path.relative(root, file)))
@@ -378,23 +497,46 @@ export function createToolset({ root, config, role = null, mcp = [], writeDirs =
             }
             case 'read_file': {
                 const located = await readPath(args.path);
+                const exists = await stat(located.abs).then((info) => info.isFile()).catch(() => false);
+                if (!exists) return missingAnswer(located.rel);
+                const rel = toPosix(path.relative(root, located.abs));
+                const known = await readFromMap(rel);
+                if (known !== null) return known;
                 return await readFile(located.abs, 'utf-8');
             }
             case 'write_file': {
                 const target = await writePath(args.path);
                 await mkdir(path.dirname(target.abs), { recursive: true });
                 await writeFile(target.abs, String(args.content ?? ''), 'utf-8');
+                await rememberInMap(target.rel);
+                await context?.file?.(target.rel);
                 return `Written ${target.rel}`;
             }
             case 'search_files': {
                 const located = await resolveInside(root, String(args.path ?? '.'), { allowRoot: true });
                 const query = String(args.query ?? '');
-                const files = await walk(located.abs, 6, []);
-                const inContent = args.inContent !== 0 && args.inContent !== false;
+                const relDir = toPosix(path.relative(root, located.abs)) || '.';
+                const scope = String(args.scope ?? (args.inContent === 0 || args.inContent === false ? 'path' : 'content'));
                 const regex = Boolean(args.regex);
-                const names = globMatcher(String(args.glob ?? ''));
+                const glob = String(args.glob ?? '');
+                // The map answers the search without touching the disk; only the files it did
+                // not read in full are looked at again.
+                if (map?.enabled && query.trim()) {
+                    const found = map.search({ query, dir: relDir, scope, regex, glob, maxResults: 200 });
+                    const hits = found.text ? found.text.split('\n') : [];
+                    for (const rel of found.partial) {
+                        const body = await readFile(path.join(root, ...rel.split('/')), 'utf-8').catch(() => null);
+                        if (body === null) continue;
+                        const hit = regex ? new RegExp(query, 'i').test(body) : body.toLowerCase().includes(query.toLowerCase());
+                        if (hit) hits.push(rel);
+                    }
+                    return hits.length ? hits.join('\n') : '(no matches)';
+                }
+                const files = await walk(located.abs, 6, []);
+                const inContent = scope !== 'path' && scope !== 'symbol';
+                const names = globMatcher(glob);
                 // A pattern without a slash names the files, a pattern with a slash names the paths.
-                const onName = !String(args.glob ?? '').trim().includes('/');
+                const onName = !glob.trim().includes('/');
                 let matcher = null;
                 if (regex) {
                     try { matcher = new RegExp(query, 'i'); }

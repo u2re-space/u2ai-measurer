@@ -306,6 +306,86 @@ paths inside `measurements.json` and `report.md` point at the copies.
 A value that cannot be read is `null`, never a guess. `DESIGN.md` of the project, when it exists,
 is read and obeyed, and its conflicts with the reference are reported.
 
+## The context of the run
+
+Every run keeps a context of its own: what it did, what it decided, and the answers the tools
+already gave. The context lives in the work directory of the run — `.tmp/<id>/context/` — and
+dies with it.
+
+```
+.tmp/<id>/context/
+  journal.ndjson   what happened, one entry per line, in the order it happened
+  state.json       what the run knows now: the pictures, the stages, the facts
+  cache/           the answers the tools already gave, so nobody asks twice
+  notes.md         the digest a person reads
+```
+
+The context is the primary knowledge of a run. It is not the permanent memory of the project: a
+new run starts with a clean head, and an old run never gets in the way of a new one.
+
+The roles read the context before they work. The brief of the context names the exact paths of
+the pictures of the run, so a model never goes looking for a file that is not there:
+
+```
+# The context of this run
+
+The pictures of this run — these paths are exact, do not look for them anywhere else:
+- `landing.png` — the original picture
+
+The stages of this run:
+- segmentate: done — 4 zones found.
+```
+
+And the roles write into it: their answers, their decisions, the plans they made and the files
+they wrote all land in the journal and in the state. The next stage starts from that instead of
+asking the model the same thing again.
+
+The answer of a picture tool is cached too, and the key of the cache carries the moment of the
+last change of the file: a picture that changed is read again, a picture that did not is not.
+
+A picture that is not where the model says it is does not throw an error — it answers with the
+paths the run really has, including the hint of the same name:
+
+```
+There is no file at `.tmp/mwh9nzfw-30a179/landing.png`.
+The picture of this run is `landing.png` — open it by that path.
+```
+
+## The map of the run
+
+The map of a run is the index of the files of the working directory: their lines, their symbols,
+their size and the moment they changed. It lives in `.tmp/<id>/map.json` and dies with the run.
+
+```json
+{
+  "version": 1,
+  "id": "mwh9nzfw-30a179",
+  "files": {
+    "src/app.js": {
+      "bytes": 2048,
+      "kind": "code",
+      "mtimeMs": 1763170000000,
+      "lineCount": 62,
+      "eol": "\n",
+      "partial": false,
+      "lines": ["export function greet() {", "    return 'hello';", "}"],
+      "symbols": [{ "name": "greet", "kind": "export", "line": 1 }]
+    }
+  }
+}
+```
+
+The tools read through the map: `list_files` answers from it, `read_file` is served from the
+lines it holds, and `search_files` searches them. A file that changed since the map was built is
+read from the disk again — the map never serves a stale file.
+
+The search knows three scopes: `path` looks at the names of the files, `content` at their text,
+`symbol` at the names the code declares, `all` at everything.
+
+The map does not read everything: it skips `.tmp`, `node_modules`, `.git` and the files with
+secrets, it holds at most 2000 files, and a file longer than 400 lines or bigger than 32 KiB is
+marked `partial` — for such a file the search goes to the disk.
+
 ## Configuration
 
 - File: `~/.ai-measure/config.json` (override the directory with `AI_MEASURE_HOME`).
@@ -354,6 +434,14 @@ The knobs a user edits most often:
 | `agent.design` | `off` \| `auto` \| `always` — when the design stage runs on its own. A stage named on the command line runs anyway. |
 | `agent.designerMaxTurns` | The tool turns the designer may spend. |
 | `output.dir` | Where the artifacts go. |
+| `context.enabled` | `false` keeps no context of the run: the stages share nothing and every answer is read again. |
+| `context.cache` | `false` keeps the journal but not the cache of the answers of the tools. |
+| `context.maxBriefChars` | How long the brief of the context may be (default 4000). |
+| `map.enabled` | `false` keeps no map of the run: the searches and the reads go to the disk every time. |
+| `map.depth` | How deep the map walks into the directories (default 8). |
+| `map.maxFiles` | How many files the map holds (default 2000). |
+| `map.maxFileBytes` | The biggest file the map reads in full (default 32768). |
+| `map.maxLines` | The most lines the map keeps of one file (default 400). |
 | `timeoutMs` | The idle timeout of one request, in milliseconds (default 900000, maximum 1800000). |
 | `roles.<name>.model` | The model of one role: `segmentator`, `cropper`, `measurer`, `recognizer`, `sampler`, `resolver`, `designer`. `roles.default` applies to every role without a model of its own. |
 | `roles.<name>.effort` | The effort of one role. It wins over the effort of the stage. |
