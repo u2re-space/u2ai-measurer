@@ -7,8 +7,28 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { fallbackChain, fallbackModels, fallbackWorthy, modelRefusal, withModelFallback } from '../src/openai/fallback.js';
+import { defaults } from '../src/config/defaults.js';
 
 const config = (models) => ({ fallback: { enabled: true, models } });
+
+test('the chain of the house starts with the Kimi', () => {
+    // The Gemini is the model of the run, the Kimi answers when it refuses.
+    assert.deepEqual(
+        fallbackChain(defaults, 'google/gemini-4-hydrogen'),
+        [
+            'google/gemini-4-hydrogen',
+            'moonshotai/kimi-k3.1-pro',
+            'moonshotai/kimi-k3',
+            'openai/gpt-5.1',
+            'anthropic/claude-sonnet-5',
+        ],
+    );
+    // Every other model falls back to the Kimi too.
+    assert.deepEqual(
+        fallbackChain(defaults, 'vendor/other'),
+        ['vendor/other', 'moonshotai/kimi-k3.1-pro', 'moonshotai/kimi-k3', 'openai/gpt-5.1'],
+    );
+});
 
 test('the chain of a model is its own list and then the shared one', () => {
     const cfg = config({

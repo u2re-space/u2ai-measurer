@@ -53,7 +53,7 @@ test('the role of a role limits its effort', () => {
 });
 
 test('the ceiling of the run lowers the effort of the stage and never raises it', () => {
-    const config = configFor({ model: 'moonshotai/kimi-k3.1-pro', reasoning: { effort: 'xhigh' } });
+    const config = configFor({ model: 'google/gemini-4-hydrogen', reasoning: { effort: 'xhigh' } });
     // The stage asks for a lot, the run promises less: the promise wins.
     assert.equal(resolveRole(config, 'measurer', { effort: 'xhigh', ceiling: 'medium' }).effort, 'medium');
     // A stage that asks for less than the ceiling keeps its own effort.
@@ -64,7 +64,7 @@ test('the ceiling of the run lowers the effort of the stage and never raises it'
 
 test('the effort of the role wins over the effort of the stage', () => {
     const config = configFor({
-        model: 'moonshotai/kimi-k3.1-pro',
+        model: 'google/gemini-4-hydrogen',
         reasoning: { effort: 'high' },
         roles: { default: {}, measurer: { effort: 'low' } },
     });
@@ -73,7 +73,7 @@ test('the effort of the role wins over the effort of the stage', () => {
 
 test('the two ceilings of a role are the lower of them', () => {
     const config = configFor({
-        model: 'moonshotai/kimi-k3.1-pro',
+        model: 'google/gemini-4-hydrogen',
         reasoning: { effort: 'xhigh' },
         roles: { default: {}, measurer: { maxEffort: 'medium' } },
     });
@@ -81,6 +81,15 @@ test('the two ceilings of a role are the lower of them', () => {
     assert.equal(resolveRole(config, 'measurer', { effort: 'xhigh', ceiling: 'high' }).effort, 'medium');
     // The run caps at low, the role at medium: low wins.
     assert.equal(resolveRole(config, 'measurer', { effort: 'xhigh', ceiling: 'low' }).effort, 'low');
+});
+
+test('the Kimi is the fast model and the ceiling of its effort is medium', () => {
+    const config = configFor({ model: 'moonshotai/kimi-k3.1-pro', reasoning: { effort: 'high' } });
+    // The levels above `medium` cost the same seconds: the ceiling of the model wins.
+    assert.equal(resolveRole(config, 'measurer').effort, 'medium');
+    // The reasoning may be turned off: the request is not refused, it is only fast.
+    const fast = configFor({ model: 'moonshotai/kimi-k3.1-pro', reasoning: { effort: 'none' } });
+    assert.equal(resolveRole(fast, 'measurer').effort, 'none');
 });
 
 test('the documentation of a role comes from the config', () => {

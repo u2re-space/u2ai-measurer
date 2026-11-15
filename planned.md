@@ -344,6 +344,26 @@
 - [x] `bin/ai-measure.js` — код возврата падения не затирается кодом команды
 - [x] Проверка: `npm test` — 181 тест, все проходят
 
+### step-c18 — Gemini 4 Hydrogen вместо kimi, kimi — как fallback
+- [x] Повод: карточка модели `google/gemini-4-hydrogen` на RouterAI (ноябрь 2026) — 1M токенов
+      контекста, до 1M токенов выхода с продолжением, уровни усилия `low|medium|high|xhigh`.
+      Kimi становится моделью-фолбэком
+- [x] Живые пробы шлюза (2026-11-15): `POST /v1/responses` с `text.format` (json_schema) → 200 и
+      ответ по схеме; с инструментом → 200 и `function_call`; с `reasoning.effort=xhigh` → 200 и
+      305 reasoning-токенов; `POST /v1/chat/completions` с `response_format` → 200 и ответ по
+      схеме ⇒ Gemini работает и в Responses, и в Chat Completions
+- [x] `src/model/profiles.js` — профиль `google/gemini-4-hydrogen`: окно 4 194 304 байта
+      (1M токенов), выход 1 048 576, потолок `xhigh`, лестница `low|medium|high|xhigh`;
+      профиль kimi приведён к реальному (потолок `medium`, лестница `none|low|medium` — под
+      скорость ответа); окно и выход minimax исправлены по карточке (4 MiB и 524K)
+- [x] `src/config/defaults.js` — модель по умолчанию `google/gemini-4-hydrogen`; цепочка
+      фолбэков: у Gemini первым идёт kimi, у прочих моделей kimi — первый в общей цепочке
+- [x] `test/profiles.test.js` — профили и срез усилия; `test/fallback.test.js` — цепочка дома;
+      `test/roles.test.js` — потолки роли и прогона на Gemini, отдельная проверка kimi;
+      `test/config.test.js` — модель по умолчанию
+- [x] README (EN): стартовый файл, таблица моделей, цепочка фолбэков
+- [x] Проверка: `npm test` — 207 тестов, все проходят
+
 ---
 
 ## 2. Правила работы

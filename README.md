@@ -272,8 +272,12 @@ chain answers the whole call again, from the first turn, with the picture in pla
   "fallback": {
     "enabled": true,
     "models": {
-      "moonshotai/kimi-k3.1-pro": ["moonshotai/kimi-k3", "openai/gpt-5.1"],
-      "*": ["moonshotai/kimi-k3"]
+      "google/gemini-4-hydrogen": [
+        "moonshotai/kimi-k3.1-pro",
+        "moonshotai/kimi-k3",
+        "openai/gpt-5.1"
+      ],
+      "*": ["moonshotai/kimi-k3.1-pro", "moonshotai/kimi-k3"]
     }
   }
 }
@@ -281,6 +285,32 @@ chain answers the whole call again, from the first turn, with the picture in pla
 
 The key `*` is the chain of every model that has no chain of its own. `fallback.enabled: false`
 turns the chain off.
+
+The chain of the house is the Kimi: it answers with the reasoning off in a fraction of the time,
+so a run that met a refusal keeps going. The Kimi is the fallback of the Gemini and of every
+other model — the two never stand in the same chain.
+
+### The models of the house
+
+The profiles of the models are tuned by the cards of the gateway (RouterAI, November 2026) and by
+the live answers of it:
+
+| Model | Context | Output | Ceiling | Ladder |
+|---|---|---|---|---|
+| `google/gemini-4-hydrogen` | 1M tokens (4 MiB) | 1M | `xhigh` | `low`, `medium`, `high`, `xhigh` |
+| `minimax/minimax-m3.1-flash` | 1M tokens (4 MiB) | 524K | `xhigh` | `low`, `medium`, `high`, `xhigh` |
+| `moonshotai/kimi-k3.1-pro` | 1M tokens (4 MiB) | 944K | `medium` | `none`, `low`, `medium` |
+
+The Gemini is the model of the run: it decodes up to 1M tokens with the continuation and takes
+the effort up to `xhigh`. The card of the vendor names the four levels of its effort and has no
+`none`, so the reasoning off is raised to `low`. MiniMax refuses to work without reasoning, so
+`none` is raised to `low` there too. The Kimi takes the reasoning off without a refusal and
+answers in a fraction of the time, so `none` stays on its ladder — the levels above `medium`
+cost the same seconds, and `medium` is its ceiling.
+
+```bash
+ai-measure measure landing.png --model moonshotai/kimi-k3.1-pro --effort none
+```
 
 ## Outputs
 
@@ -408,7 +438,7 @@ The starter file:
 
 ```json
 {
-  "model": "moonshotai/kimi-k3.1-pro",
+  "model": "google/gemini-4-hydrogen",
   "reasoning": { "effort": "high", "summary": "auto" },
   "backends": [
     { "baseURL": "https://routerai.ru/api/v1", "env": "ROUTERAI_API_KEY" }

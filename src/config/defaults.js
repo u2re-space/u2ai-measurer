@@ -13,7 +13,7 @@ import { ENUMS } from './constants.js';
 export const defaults = {
   // --- API -----------------------------------------------------------------
   /** Text model for the role agents. */
-  model: 'moonshotai/kimi-k3.1-pro',
+  model: 'google/gemini-4-hydrogen',
   /** Endpoint of the text API; backends[] below can override it. */
   baseURL: 'https://routerai.ru/api/v1',
   apiKey: null,
@@ -56,13 +56,20 @@ export const defaults = {
   /**
    * Model fallback: when a model fails, the next one of the chain answers instead.
    * `models` maps a model to the models to try after it; the key `*` is the chain for every
-   * other model.
+   * other model. The chain of the house is the Kimi: it answers with the reasoning off in a
+   * fraction of the time, so a run that met a refusal keeps going.
    */
   fallback: {
     enabled: true,
     models: {
+      'google/gemini-4-hydrogen': [
+        'moonshotai/kimi-k3.1-pro',
+        'moonshotai/kimi-k3',
+        'openai/gpt-5.1',
+        'anthropic/claude-sonnet-5',
+      ],
       'moonshotai/kimi-k3.1-pro': ['moonshotai/kimi-k3', 'openai/gpt-5.1', 'anthropic/claude-sonnet-5'],
-      '*': ['moonshotai/kimi-k3', 'openai/gpt-5.1'],
+      '*': ['moonshotai/kimi-k3.1-pro', 'moonshotai/kimi-k3', 'openai/gpt-5.1'],
     },
   },
 
