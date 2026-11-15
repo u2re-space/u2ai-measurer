@@ -335,6 +335,9 @@ answers on the Gemini. A role that names its own model in the configuration
 }
 ```
 
+The `measure` stage itself has no verdict yet: what is better there — the Gemini or the Kimi —
+is not decided, so the stage keeps the model of the run until there is an answer.
+
 ## Outputs
 
 The artifacts land in `output.dir` (default `./measurements`):
