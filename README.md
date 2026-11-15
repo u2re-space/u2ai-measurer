@@ -424,7 +424,7 @@ The starter file:
     "recognize": { "enabled": true, "effort": "high", "maxTurns": 8 },
     "sample": { "enabled": true, "mode": "local", "localEffort": "low", "aiEffort": "high" },
     "resolve": { "enabled": true, "mode": "local", "effort": "high" },
-    "design": { "enabled": true, "effort": "xhigh", "maxTurns": 16 }
+    "design": { "enabled": true, "effort": "high", "maxTurns": 16 }
   }
 }
 ```

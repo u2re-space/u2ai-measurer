@@ -251,7 +251,7 @@ export const defaults = {
       /** Max agent turns for the designer role. */
       maxTurns: 16,
       /** The effort the stage asks for: the direction is a style decision, so it asks for a lot. */
-      effort: 'xhigh',
+      effort: 'high',
       /** Write an HTML skeleton next to the design direction. */
       template: true,
     },
