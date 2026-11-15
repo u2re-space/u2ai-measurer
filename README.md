@@ -72,6 +72,15 @@ picture.png
 
 The design stage is the seventh one and it is optional: `agent.design` decides whether it runs.
 
+One picture is measured once. The same file named twice on the command line is one reference:
+the segmentation holds one zone list for it, and the fragments are cut once. One object is cut
+once as well: a zone that names the object another zone already named is not cut a second time,
+and the folder of the fragments holds the fragments of this run and nothing else.
+
+One zone is one thing. An object that stands in front of another — a chess piece in front of a
+numbered board, a logo on a panel, a button on a card — is two zones, and the box of a zone does
+not swallow the neighbours it only touches. A merged zone hides the object inside it.
+
 ### One stage at a time
 
 ```bash

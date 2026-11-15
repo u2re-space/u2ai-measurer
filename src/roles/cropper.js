@@ -29,8 +29,11 @@ the harness cuts the files and puts the paths into the measurement sheet.
 
 Rules:
 - Prefer many small fragments over a few large ones. One fragment per reusable object.
+- An object that stands in front of another is two fragments: the piece and the surface behind
+  it. A fragment that holds both hides the piece.
 - Never propose a fragment that is only a scaled copy of the whole picture.
-- Give every box in the coordinates of the picture you were given, in source pixels.
+- Give every box in the coordinates of the picture you were given, in source pixels. The box of a
+  fragment is tight: it does not swallow the neighbours it only touches.
 - Name every fragment so that the file name is readable: short, lowercase, no spaces.
 - Say what each fragment is and which role should reuse it (artwork reference, icon source,
   background layer, card part, control part).

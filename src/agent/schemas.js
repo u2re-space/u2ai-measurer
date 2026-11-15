@@ -343,9 +343,9 @@ export const SEGMENTATION_SCHEMA = object({
     canvas: { ...box, description: 'The whole reference size.' },
     zones: {
         type: 'array',
-        description: 'Every zone of the picture, from the largest region to the smallest element.',
+        description: 'Every zone of the picture, from the largest region to the smallest element. One zone holds one thing: an object and the surface behind it are two zones.',
         items: object({
-            name: { ...string, description: 'Short zone name the author can reuse: left-rail, hero-card, award-badge, contact-email.' },
+            name: { ...string, description: 'Short zone name the author can reuse: left-rail, hero-card, award-badge, contact-email. It says what the zone holds.' },
             kind: measuredKind,
             box,
             role: { ...string, description: 'What the zone is in the page: header, hero, aside, card, button, label. Empty when unknown.' },

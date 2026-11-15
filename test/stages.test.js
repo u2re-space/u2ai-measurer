@@ -14,10 +14,10 @@ import assert from 'node:assert/strict';
 import path from 'node:path';
 import os from 'node:os';
 import http from 'node:http';
-import { mkdtemp, mkdir, rm, readFile, writeFile, stat } from 'node:fs/promises';
+import { mkdtemp, mkdir, readdir, rm, readFile, writeFile, stat } from 'node:fs/promises';
 import sharp from 'sharp';
 
-import { runPipeline } from '../src/shared/pipeline.js';
+import { runPipeline, stageReferences } from '../src/shared/pipeline.js';
 import { createClient } from '../src/openai/client.js';
 import { cloneDefaults } from '../src/config/defaults.js';
 import { runMeasureStage } from '../src/stages/measure.js';
@@ -26,6 +26,7 @@ import { runCropStage } from '../src/stages/cropper.js';
 import { runRecognizeStage } from '../src/stages/recognize.js';
 import { writeStageFile } from '../src/stages/artifacts.js';
 import { splitReferences } from '../src/stages/references.js';
+import { sameFragment } from '../src/image/crop.js';
 import { runDesignStage, shouldRunDesign, readDesignMd, clipMiddle } from '../src/stages/design.js';
 import { runResolve, buildSheet, buildPalette, buildTokens, buildDesignMd, buildReport } from '../src/stages/resolve.js';
 import { runSampleStage, mergeSampled, colorLines } from '../src/stages/sample.js';
@@ -514,6 +515,185 @@ test('the sub-references come first and the originals they cover stay out of the
     assert.equal(attached.length, 1);
     assert.equal(attached[0].rel, 'shot-1.png');
     assert.equal(context.length, 1);
+});
+
+test('the same picture is one reference', async () => {
+    const { root, cleanup } = await workspace();
+    try {
+        const { references, warnings } = await stageReferences({
+            root,
+            workId: 'w1',
+            images: ['picture.png', 'picture.png', './picture.png'],
+        });
+        assert.equal(references.length, 1);
+        assert.equal(references[0].rel, 'picture.png');
+        assert.equal(warnings.length, 2);
+        assert.match(warnings[0], /twice/i);
+    } finally {
+        await cleanup();
+    }
+});
+
+test('the same picture is looked at once', async () => {
+    const { root, cleanup } = await workspace();
+    try {
+        const { attached } = splitReferences([
+            { kind: 'original', rel: 'picture.png' },
+            { kind: 'original', rel: 'picture.png' },
+        ]);
+        assert.equal(attached.length, 1);
+        const runner = fakeRunner(SEGMENTATION);
+        const result = await runSegmentStage({
+            root,
+            workId: 'w1',
+            config: cloneDefaults(),
+            runner,
+            references: [
+                { kind: 'original', rel: 'picture.png' },
+                { kind: 'original', rel: 'picture.png' },
+            ],
+            outDir: path.join(root, 'measurements'),
+        });
+        assert.equal(result.segmentation.sources.length, 1);
+        assert.equal(runner.roles.length, 1);
+    } finally {
+        await cleanup();
+    }
+});
+
+test('the crop stage does not cut the same object twice', async () => {
+    const { root, cleanup } = await workspace();
+    try {
+        const outDir = path.join(root, 'measurements');
+        // The same artwork, named twice: the second box is the first one with moved edges.
+        await writeStageFile(outDir, 'segmentation', {
+            generatedBy: 'ai-measure',
+            stage: 'segmentate',
+            sources: [{
+                source: 'picture.png',
+                canvas: { x: 0, y: 0, width: 100, height: 80 },
+                scale: 1,
+                zones: [
+                    {
+                        name: 'chess-artwork', kind: 'image', box: { x: 40, y: 25, width: 45, height: 52 },
+                        role: 'hero', use: 'artwork', crop: 'asset', hasText: false, notes: '',
+                    },
+                    {
+                        name: 'hero-chess-artwork', kind: 'image', box: { x: 45, y: 25, width: 39, height: 52 },
+                        role: 'hero', use: 'artwork', crop: 'asset', hasText: false, notes: '',
+                    },
+                ],
+            }],
+        });
+        const result = await runCropStage({
+            root,
+            workId: 'w1',
+            config: cloneDefaults(),
+            runner: fakeRunner(null),
+            references: [{ kind: 'original', rel: 'picture.png' }],
+            outDir,
+        });
+        assert.equal(result.crops.length, 1);
+        assert.equal(result.crops[0].name, 'chess-artwork');
+        assert.match(result.warnings.join(' '), /not cut again/i);
+    } finally {
+        await cleanup();
+    }
+});
+
+test('the crop stage cuts the same box in two pictures', async () => {
+    const { root, cleanup } = await workspace();
+    try {
+        const outDir = path.join(root, 'measurements');
+        await sharp({
+            create: { width: 100, height: 80, channels: 4, background: { r: 10, g: 10, b: 10, alpha: 1 } },
+        }).png().toFile(path.join(root, 'other.png'));
+        await writeStageFile(outDir, 'segmentation', {
+            generatedBy: 'ai-measure',
+            stage: 'segmentate',
+            sources: [
+                {
+                    source: 'picture.png',
+                    canvas: { x: 0, y: 0, width: 100, height: 80 },
+                    scale: 1,
+                    zones: [{
+                        name: 'badge', kind: 'image', box: { x: 10, y: 10, width: 20, height: 20 },
+                        role: 'card', use: 'artwork', crop: 'asset', hasText: false, notes: '',
+                    }],
+                },
+                {
+                    source: 'other.png',
+                    canvas: { x: 0, y: 0, width: 100, height: 80 },
+                    scale: 1,
+                    zones: [{
+                        name: 'badge', kind: 'image', box: { x: 10, y: 10, width: 20, height: 20 },
+                        role: 'card', use: 'artwork', crop: 'asset', hasText: false, notes: '',
+                    }],
+                },
+            ],
+        });
+        const result = await runCropStage({
+            root,
+            workId: 'w1',
+            config: cloneDefaults(),
+            runner: fakeRunner(null),
+            references: [
+                { kind: 'original', rel: 'picture.png' },
+                { kind: 'original', rel: 'other.png' },
+            ],
+            outDir,
+        });
+        // The same box in two pictures is two fragments.
+        assert.equal(result.crops.length, 2);
+        assert.equal(result.crops[0].source, 'picture.png');
+        assert.equal(result.crops[1].source, 'other.png');
+    } finally {
+        await cleanup();
+    }
+});
+
+test('a piece on a board is two fragments', () => {
+    const piece = { x: 60, y: 30, width: 12, height: 30 };
+    const board = { x: 40, y: 25, width: 45, height: 52 };
+    assert.equal(sameFragment(piece, board), false);
+    assert.equal(sameFragment(board, { x: 45, y: 25, width: 39, height: 52 }), true);
+    assert.equal(sameFragment(board, { x: 40, y: 25, width: 45, height: 52 }), true);
+    assert.equal(sameFragment(board, { x: 0, y: 0, width: 10, height: 10 }), false);
+});
+
+test('the crop stage clears the fragments of the previous run', async () => {
+    const { root, cleanup } = await workspace();
+    try {
+        const outDir = path.join(root, 'measurements');
+        await mkdir(path.join(outDir, 'crops'), { recursive: true });
+        await writeFile(path.join(outDir, 'crops', '01-asset-old.png'), 'png', 'utf-8');
+        await writeStageFile(outDir, 'segmentation', {
+            generatedBy: 'ai-measure',
+            stage: 'segmentate',
+            sources: [{
+                source: 'picture.png',
+                canvas: { x: 0, y: 0, width: 100, height: 80 },
+                scale: 1,
+                zones: [{
+                    name: 'badge', kind: 'image', box: { x: 10, y: 10, width: 20, height: 20 },
+                    role: 'card', use: 'artwork', crop: 'asset', hasText: false, notes: '',
+                }],
+            }],
+        });
+        const result = await runCropStage({
+            root,
+            workId: 'w1',
+            config: cloneDefaults(),
+            runner: fakeRunner(null),
+            references: [{ kind: 'original', rel: 'picture.png' }],
+            outDir,
+        });
+        assert.equal(result.crops.length, 1);
+        const left = await readdir(path.join(outDir, 'crops'));
+        assert.deepEqual(left, ['01-asset-badge.png']);
+    } finally {
+        await cleanup();
+    }
 });
 
 test('the design stage reads the DESIGN.md and saves the direction', async () => {

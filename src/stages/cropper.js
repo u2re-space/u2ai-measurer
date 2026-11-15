@@ -21,9 +21,9 @@
  */
 
 import path from 'node:path';
-import { mkdir } from 'node:fs/promises';
+import { mkdir, readdir, rm, stat } from 'node:fs/promises';
 import { rasterCrop, rasterInfo } from '../image/sharp.js';
-import { clampRect } from '../image/crop.js';
+import { clampRect, sameFragment } from '../image/crop.js';
 import { CROP_PLAN_SCHEMA } from '../agent/schemas.js';
 import { attachReference, attachmentBlock, pictureBlock, splitReferences } from './references.js';
 import { CROPS_DIR, cropSlug, readStageFile, scaleBox, writeStageFile } from './artifacts.js';
@@ -89,6 +89,15 @@ export async function runCropStage({
         return { crops: [], file: null, warnings: ['There is no segmentation to cut: run the segmentate stage first.'] };
     }
 
+    // The folder of the fragments belongs to this run.
+    //
+    // The fragments of the previous run are not the fragments of this one: a folder that keeps
+    // them holds every picture ever cut, and the reader cannot tell which of them the
+    // measurement sheet talks about.
+    const dir = path.join(outDir, CROPS_DIR);
+    await mkdir(dir, { recursive: true });
+    await clearCrops(dir, warnings);
+
     let plan = planFromZones(segmentation);
     if (mode === 'ai') {
         const asked = await askCropper({ root, workId, config, runner, references, segmentation, maxTurns, signal, warnings });
@@ -106,11 +115,14 @@ export async function runCropStage({
         if (item?.rel) files.set(path.basename(item.rel), path.resolve(root, item.rel));
     }
 
-    const dir = path.join(outDir, CROPS_DIR);
-    await mkdir(dir, { recursive: true });
-
     const crops = [];
-    const seen = new Set();
+    // The rectangles that are already cut, per picture.
+    //
+    // Two zones of the same picture that name the same object are the same fragment: the model
+    // names the box a little differently every time it looks, so the boxes are compared by the
+    // place they cover and the size they have, not by their numbers. Two pictures may hold the
+    // same box: the key is the picture, not the box.
+    const cutRects = new Map();
     const cap = maxCrops > 0 ? maxCrops : null;
     for (const item of plan) {
         if (cap && crops.length >= cap) {
@@ -136,9 +148,14 @@ export async function runCropStage({
             continue;
         }
         const rect = clampRect(box, info);
-        const key = `${rect.x}:${rect.y}:${rect.width}:${rect.height}`;
-        if (seen.has(key)) continue;
-        seen.add(key);
+        const taken = cutRects.get(file) ?? [];
+        const twin = taken.find((other) => sameFragment(other, rect));
+        if (twin) {
+            warnings.push(`The fragment "${String(item?.name ?? '')}" covers the same object as the fragment "${twin.name}": it was not cut again.`);
+            continue;
+        }
+        taken.push({ ...rect, name: String(item?.name ?? '') });
+        cutRects.set(file, taken);
         const name = `${String(crops.length + 1).padStart(2, '0')}-${item.kind === 'asset' ? 'asset' : 'detail'}-${cropSlug(item?.name, 'crop')}.png`;
         const output = path.join(dir, name);
         try {
@@ -185,6 +202,33 @@ export async function runCropStage({
 }
 
 /**
+ * Clear the folder of the fragments before the run cuts new ones.
+ *
+ * Only the files are removed: a folder of the run that holds something else is left alone.
+ * @param {string} dir the folder of the fragments
+ * @param {string[]} warnings the warnings of the stage
+ * @returns {Promise<void>}
+ */
+async function clearCrops(dir, warnings) {
+    let names = [];
+    try {
+        names = await readdir(dir);
+    } catch {
+        return;
+    }
+    for (const name of names) {
+        const file = path.join(dir, name);
+        try {
+            const info = await stat(file);
+            if (!info.isFile()) continue;
+            await rm(file, { force: true });
+        } catch (error) {
+            warnings.push(`The old fragment ${name} could not be removed: ${error?.message ?? error}`);
+        }
+    }
+}
+
+/**
  * Ask the cropper which fragments are worth cutting.
  * @param {object} options the options of the stage
  * @returns {Promise<Array<object>>}
@@ -201,6 +245,7 @@ async function askCropper({ root, workId, config, runner, references, segmentati
             pictureBlock(attached),
             '',
             'Name the fragments of this picture that are worth cutting out.',
+            'One fragment per object: an object that stands in front of another — a piece in front of a board — is two fragments.',
         ].join('\n');
         const answer = await runner.run('cropper', {
             text,

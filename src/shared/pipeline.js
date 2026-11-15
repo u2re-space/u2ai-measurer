@@ -66,8 +66,21 @@ export async function stageReferences({ root, workId, images = [] }) {
     const references = [];
     const warnings = [];
     let outside = 0;
+    // One picture is one reference.
+    //
+    // The arguments of a run may name the same file twice — a model that calls the CLI with
+    // `--image landing.png landing.png` is not wrong, it is redundant — and every stage would
+    // then look at the same picture twice: two segmentations, two sets of fragments, twice the
+    // money and twice the noise in the files of the run. The second name of a picture is dropped.
+    const seen = new Set();
     for (const image of images) {
         const abs = path.resolve(root, String(image ?? ''));
+        const key = process.platform === 'win32' ? abs.toLowerCase() : abs;
+        if (seen.has(key)) {
+            warnings.push(`The reference ${image} was given twice: the picture is measured once.`);
+            continue;
+        }
+        seen.add(key);
         const info = await stat(abs).catch(() => null);
         if (!info?.isFile()) {
             warnings.push(`The reference ${image} does not exist.`);

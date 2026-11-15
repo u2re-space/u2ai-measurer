@@ -49,7 +49,16 @@ export async function runSegmentStage({
     }
 
     const sources = [];
+    const done = new Set();
     for (const item of attached) {
+        // The same picture is segmented once: two segmentations of one picture would cut every
+        // fragment twice and leave two zone lists of the same screen in the file.
+        const key = process.platform === 'win32' ? String(item.rel ?? '').toLowerCase() : String(item.rel ?? '');
+        if (done.has(key)) {
+            warnings.push(`The reference ${item.rel} was segmented already: it is segmented once.`);
+            continue;
+        }
+        done.add(key);
         const image = await attachReference({ root, rel: item.rel, config });
         if (!image) {
             warnings.push(`The reference ${item.rel} could not be read.`);
@@ -61,6 +70,7 @@ export async function runSegmentStage({
             pictureBlock(attached),
             '',
             'Split this picture into zones. Give the box of every zone and nothing else.',
+            'One zone is one thing: an object that stands in front of another — a piece in front of a board — is two zones, and the box of a zone does not swallow the neighbours it only touches.',
         ].join('\n');
         const answer = await runner.run('segmentator', {
             text,

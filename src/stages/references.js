@@ -115,8 +115,18 @@ export function pictureBlock(references = []) {
  * @ai.hint pure
  */
 export function splitReferences(references = []) {
-    const subrefs = references.filter((item) => item?.kind === 'subref');
-    const originals = references.filter((item) => item?.kind === 'original');
+    const list = [];
+    const seen = new Set();
+    for (const item of Array.isArray(references) ? references : []) {
+        const rel = String(item?.rel ?? '');
+        if (!rel) continue;
+        const key = process.platform === 'win32' ? rel.toLowerCase() : rel;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        list.push(item);
+    }
+    const subrefs = list.filter((item) => item?.kind === 'subref');
+    const originals = list.filter((item) => item?.kind === 'original');
     const covered = new Set();
     for (const sub of subrefs) {
         const source = String(sub.source ?? '').trim();
