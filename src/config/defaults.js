@@ -225,14 +225,14 @@ export const defaults = {
       /** Max agent turns the recognizer may spend. */
       maxTurns: 12,
       /** The effort the stage asks for: the typography is a style decision, so it asks for a lot. */
-      effort: 'high',
+      effort: 'xhigh',
     },
     sample: {
       enabled: true,
       /** local: the harness reads the pixels, the model only names the colours. ai: the model samples itself. */
       mode: 'local',
       /** The effort of the local mode: the colours are read by the harness, the model only names them. */
-      localEffort: 'low',
+      localEffort: 'medium',
       /** The effort of the ai mode: the model reads the pixels itself and has to be sharp. */
       aiEffort: 'high',
       /** Max agent turns the sampler may spend. */
@@ -245,7 +245,7 @@ export const defaults = {
       /** Max agent turns the resolver may spend in the ai mode. */
       maxTurns: 8,
       /** The effort the stage asks for in the ai mode. */
-      effort: 'high',
+      effort: 'xhigh',
       /** Write DESIGN.md next to the measurements. */
       designMd: true,
       /** Write a CSS token file next to the measurements. */

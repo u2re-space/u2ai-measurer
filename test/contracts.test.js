@@ -38,7 +38,7 @@ test('the stages that may work in two ways name their mode', () => {
         assert.ok(ENUMS.stageModes.includes(defaults.stages[id].mode), `${id} has no mode`);
     }
     assert.equal(defaults.stages.sample.mode, 'local');
-    assert.equal(defaults.stages.sample.localEffort, 'low');
+    assert.equal(defaults.stages.sample.localEffort, 'medium');
     assert.equal(defaults.stages.sample.aiEffort, 'high');
 });
 
