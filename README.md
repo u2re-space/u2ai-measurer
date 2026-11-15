@@ -731,6 +731,9 @@ npm test               # the tests
 npm pack --dry-run     # what the package would publish
 ```
 
+The suite is offline: `test/offline-guard.js` refuses every address outside the machine, so
+a test that reaches the outside fails fast instead of spending money.
+
 ## Lineage
 
 The roles and the stages were ported from the monolith `Universal-AI` (0.2.xx), where the
