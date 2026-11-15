@@ -39,3 +39,4 @@ export * from './stages/design.js';
 export * from './stages/resolve.js';
 export * from './stages/publish.js';
 export * from './shared/house.js';
+export * from './shared/child-log.js';

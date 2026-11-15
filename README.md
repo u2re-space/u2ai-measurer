@@ -708,6 +708,21 @@ The external CLIs are called as subprocesses. The binary is looked up in `AI_IMA
 package, in `submodules/u2ai-images` (or `submodules/u2ai-decomposer`), in the installed package
 `node_modules/@u2ai/images` (or `node_modules/@u2ai/decomposer`) and in `PATH`.
 
+### The log of an external CLI comes live
+
+A child that writes into a pipe is quiet until it is over: the terminal waits, and the silence
+says nothing — the child may work, may think, may hang. The run shows the lines of the child as
+they are written, so the wait becomes a log:
+
+```
+  [ai-image] gpt-image-2 · 1024×1024
+  [ai-image] the answer carries 1 picture(s)
+```
+
+Every line of the child comes with the name of the child in front of it. The stderr of the child
+is yellow. The answer of the tool does not change: the model still gets the whole output of the
+child.
+
 ## Examples
 
 `examples/` holds a run of the measurer over `examples/landing.png`:

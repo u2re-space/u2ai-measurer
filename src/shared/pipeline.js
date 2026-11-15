@@ -249,7 +249,7 @@ export async function runPipeline({
 
     // One toolset for the whole run: the stages open the directories a role may write into, and
     // the role runner executes the calls with the very same executor.
-    const toolset = createToolset({ root, config, mcp, context, map });
+    const toolset = createToolset({ root, config, mcp, context, map, notify });
 
     const roles = createRoleRunner({
         client,

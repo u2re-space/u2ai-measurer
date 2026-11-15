@@ -8,6 +8,7 @@
  */
 
 import { COLORS, paint } from './colors.js';
+import { formatBridgeLine } from '../shared/child-log.js';
 
 /**
  * Detect the output mode of the terminal.
@@ -170,6 +171,12 @@ function linesOf(e, { verbose = false } = {}) {
                     .map((line) => ({ text: `    ${line}`, level: 'log' }));
             }
             return toolSummary(e.name ?? '', e.output ?? '').map((line) => ({ text: `    ${line}`, level: 'log' }));
+        }
+        case 'bridge.log': {
+            // The log of a sibling CLI: it comes live, while the CLI works.
+            const text = formatBridgeLine(e.name, e.line);
+            if (!text) return [];
+            return [{ text: `  ${text}`, level: e.stream === 'stderr' ? 'warn' : 'log' }];
         }
         case 'request.start':
             return verbose ? [{ text: `  [request] ${e.backend ?? ''} ${e.path ?? ''}`, level: 'log' }] : [];

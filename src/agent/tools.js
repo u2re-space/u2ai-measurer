@@ -28,6 +28,7 @@ import { toolSpecs as buildSpecs } from './tool-specs.js';
 import { isInside, resolveInside, toPosix } from './paths.js';
 import { mapFiles } from './run-map.js';
 import { writeFileAtomic } from '../shared/house.js';
+import { createLineReader } from '../shared/child-log.js';
 
 export { toolSpecs, enabledToolNames } from './tool-specs.js';
 
@@ -127,16 +128,26 @@ export async function resolveExternalCli(name, { root = PACKAGE_ROOT, env = proc
 
 /**
  * Run an external CLI and collect its answer.
+ *
+ * The log of the child comes live: `onLine` is called with every line of the child as it is
+ * written, so the run shows what the sibling CLI does instead of waiting in silence. The whole
+ * output is still collected in the answer.
  * @param {keyof typeof EXTERNAL_CLIS} name
  * @param {string[]} args
- * @param {{ root?: string, env?: object, cwd?: string, timeoutMs?: number }} [options]
+ * @param {{ root?: string, env?: object, cwd?: string, timeoutMs?: number,
+ *   onLine?: ((event: { stream: string, line: string }) => void)|null }} [options]
  * @returns {Promise<{ code: number, stdout: string, stderr: string }>}
  * @exports
  * @ai.hint io
  */
-export async function runExternalCli(name, args, { root = PACKAGE_ROOT, env = process.env, cwd = PACKAGE_ROOT, timeoutMs = 600_000 } = {}) {
+export async function runExternalCli(name, args, { root = PACKAGE_ROOT, env = process.env, cwd = PACKAGE_ROOT, timeoutMs = 600_000, onLine = null } = {}) {
     const found = await resolveExternalCli(name, { root, env });
     if (!found) throw new Error(`The external CLI "${name}" is not installed: set ${EXTERNAL_CLIS[name]?.env ?? 'the path'} or install ${EXTERNAL_CLIS[name]?.package ?? 'the package'}.`);
+    const live = typeof onLine === 'function';
+    const readers = {
+        stdout: live ? createLineReader((line) => onLine({ stream: 'stdout', line })) : null,
+        stderr: live ? createLineReader((line) => onLine({ stream: 'stderr', line })) : null,
+    };
     return await new Promise((resolve, reject) => {
         const child = spawn(found.command, [...found.args, ...args], {
             cwd,
@@ -147,10 +158,27 @@ export async function runExternalCli(name, args, { root = PACKAGE_ROOT, env = pr
         let stdout = '';
         let stderr = '';
         const timer = setTimeout(() => child.kill(), timeoutMs);
-        child.stdout?.on('data', (chunk) => { stdout += String(chunk); });
-        child.stderr?.on('data', (chunk) => { stderr += String(chunk); });
-        child.on('error', (error) => { clearTimeout(timer); reject(error); });
-        child.on('close', (code) => { clearTimeout(timer); resolve({ code: code ?? 0, stdout, stderr }); });
+        child.stdout?.on('data', (chunk) => {
+            stdout += String(chunk);
+            readers.stdout?.push(chunk);
+        });
+        child.stderr?.on('data', (chunk) => {
+            stderr += String(chunk);
+            readers.stderr?.push(chunk);
+        });
+        child.on('error', (error) => {
+            clearTimeout(timer);
+            readers.stdout?.flush();
+            readers.stderr?.flush();
+            reject(error);
+        });
+        child.on('close', (code) => {
+            clearTimeout(timer);
+            // The last line of the child may have no line break at the end.
+            readers.stdout?.flush();
+            readers.stderr?.flush();
+            resolve({ code: code ?? 0, stdout, stderr });
+        });
     });
 }
 
@@ -225,10 +253,10 @@ export function mcpToolEntries(connections = []) {
  * already asked comes from the cache, and every call is written into the journal.
  * @param {{ root: string, config: object, role?: string|null, mcp?: object[],
  *   writeDirs?: string[], env?: object, packageRoot?: string, context?: object|null,
- *   map?: object|null }} opts
+ *   map?: object|null, notify?: ((event: object) => void)|null }} opts
  * @returns {{ execute: (name: string, args: object) => Promise<string>, specs: object[], setWriteDirs: Function, writeDirs: Function }}
  */
-export function createToolset({ root, config, role = null, mcp = [], writeDirs = null, env = process.env, packageRoot = PACKAGE_ROOT, context = null, map = null }) {
+export function createToolset({ root, config, role = null, mcp = [], writeDirs = null, env = process.env, packageRoot = PACKAGE_ROOT, context = null, map = null, notify = null }) {
     const mcpTools = mcpToolEntries(mcp);
     const mcpSpecs = mcpTools.map((entry) => ({
         type: 'function',
@@ -562,7 +590,14 @@ export function createToolset({ root, config, role = null, mcp = [], writeDirs =
             }
             case 'call_ai_image': {
                 const list = parseArgsList(args.args);
-                const result = await runExternalCli('ai-image', list, { root: packageRoot, env, cwd: root });
+                const result = await runExternalCli('ai-image', list, {
+                    root: packageRoot,
+                    env,
+                    cwd: root,
+                    // The log of the sibling CLI comes live: the run shows what it does
+                    // while it works.
+                    onLine: (event) => notify?.({ type: 'bridge.log', name: 'ai-image', stream: event.stream, line: event.line }),
+                });
                 if (result.code !== 0) {
                     throw new Error(`ai-image exited with code ${result.code}: ${result.stderr.trim() || result.stdout.trim()}`);
                 }
@@ -570,7 +605,12 @@ export function createToolset({ root, config, role = null, mcp = [], writeDirs =
             }
             case 'call_ai_decompose': {
                 const list = parseArgsList(args.args);
-                const result = await runExternalCli('ai-decompose', list, { root: packageRoot, env, cwd: root });
+                const result = await runExternalCli('ai-decompose', list, {
+                    root: packageRoot,
+                    env,
+                    cwd: root,
+                    onLine: (event) => notify?.({ type: 'bridge.log', name: 'ai-decompose', stream: event.stream, line: event.line }),
+                });
                 if (result.code !== 0) {
                     throw new Error(`ai-decompose exited with code ${result.code}: ${result.stderr.trim() || result.stdout.trim()}`);
                 }
