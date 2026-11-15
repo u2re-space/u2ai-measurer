@@ -17,7 +17,7 @@
  * @changed 2026-11-15 The map of the run and the cache of the context answer the tools.
  */
 import path from 'node:path';
-import { readFile, writeFile, mkdir, readdir, stat } from 'node:fs/promises';
+import { readFile, mkdir, readdir, stat } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { rasterInfo, rasterCrop, rasterSplit } from '../image/sharp.js';
@@ -27,6 +27,7 @@ import { clampRect } from '../image/crop.js';
 import { toolSpecs as buildSpecs } from './tool-specs.js';
 import { isInside, resolveInside, toPosix } from './paths.js';
 import { mapFiles } from './run-map.js';
+import { writeFileAtomic } from '../shared/house.js';
 
 export { toolSpecs, enabledToolNames } from './tool-specs.js';
 
@@ -507,7 +508,7 @@ export function createToolset({ root, config, role = null, mcp = [], writeDirs =
             case 'write_file': {
                 const target = await writePath(args.path);
                 await mkdir(path.dirname(target.abs), { recursive: true });
-                await writeFile(target.abs, String(args.content ?? ''), 'utf-8');
+                await writeFileAtomic(target.abs, String(args.content ?? ''));
                 await rememberInMap(target.rel);
                 await context?.file?.(target.rel);
                 return `Written ${target.rel}`;

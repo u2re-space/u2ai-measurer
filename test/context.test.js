@@ -3,8 +3,8 @@
  * @purpose Tests of the context of a run and of the map of a run: the journal, the state, the
  *          cache, the brief, the index of the files and the tools that read through them.
  *
- * The context lives in `.tmp/<id>/context/` and the map in `.tmp/<id>/map.json`: both belong to
- * the run and die with it. A new run starts with a clean head.
+ * The context lives in `.ai/tmp/<id>/context/` and the map in `.ai/tmp/<id>/map.json`: both
+ * belong to the run and die with it. A new run starts with a clean head.
  *
  * @depends node:test, agent/context, agent/run-map, agent/tools
  */
@@ -123,7 +123,7 @@ test('the context of a run dies with it and does not leak into the next one', as
         const second = await openContext({ root, workId: 'run-new' });
         assert.doesNotMatch(second.brief(), /the old decision/);
         assert.deepEqual(await second.journal(), []);
-        assert.equal(contextRel('run-new'), '.tmp/run-new/context');
+        assert.equal(contextRel('run-new'), '.ai/tmp/run-new/context');
     } finally {
         await cleanup();
     }
@@ -144,8 +144,8 @@ test('the map of a run indexes the files with their lines and their symbols', as
 
         const saved = await loadRunMap({ root, workId: 'run-5' });
         assert.ok(saved.files['notes.md']);
-        assert.equal(runMapRel('run-5'), '.tmp/run-5/map.json');
-        assert.equal(runMapFile(root, 'run-5'), path.join(root, '.tmp', 'run-5', 'map.json'));
+        assert.equal(runMapRel('run-5'), '.ai/tmp/run-5/map.json');
+        assert.equal(runMapFile(root, 'run-5'), path.join(root, '.ai', 'tmp', 'run-5', 'map.json'));
     } finally {
         await cleanup();
     }
@@ -256,7 +256,7 @@ test('a missing picture is answered with the paths the run really has', async ()
         const map = await openRunMap({ root, workId: 'run-12' });
         const toolset = createToolset({ root, config: { tools: {} }, context, map });
 
-        const answer = await toolset.execute('view_image', { path: '.tmp/run-12/landing.png' });
+        const answer = await toolset.execute('view_image', { path: '.ai/tmp/run-12/landing.png' });
         assert.match(answer, /no file/i);
         assert.match(answer, /landing\.png/);
         assert.doesNotMatch(answer, /Tool error/);

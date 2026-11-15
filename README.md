@@ -187,7 +187,7 @@ The log of a run says what happens, not only that something happens:
 | `reference: landing.png (original)` | The picture the measurer reads. |
 | `tool: sample_colors path=landing.png x=10 y=20 width=30 height=40` | The call the model made, with its arguments. |
 | `colours: #aabbcc 62.5%  #112233 37.5%` | What the tool found: the colours and their share of the area. |
-| `crop: .tmp/<id>/crops/01-bishop.png — artwork "bishop"` | The fragment that was cut out of the reference. |
+| `crop: measurements/crops/01-bishop.png — artwork "bishop"` | The fragment that was cut out of the reference. |
 | `sheet: 12 elements, 3 regions, 5 rules` | The shape of the sheet the model returned. |
 | `written: measurements/measurements.json (12 kB)` | The file of the delivery. |
 
@@ -220,10 +220,10 @@ is the same picture every time. The record says how big it was. The log is off b
 on with the directory:
 
 ```json
-{ "logging": { "enabled": true, "dir": ".tmp/api" } }
+{ "logging": { "enabled": true, "dir": ".ai/logs/api" } }
 ```
 
-or with `AI_MEASURE_LOG_DIR=.tmp/api`.
+or with `AI_MEASURE_LOG_DIR=.ai/logs/api`.
 
 ### Exit codes
 
@@ -351,9 +351,11 @@ The artifacts land in `output.dir` (default `./measurements`):
 | `report.md` | What was measured, how certain it is and which crops exist. |
 | `crops/` | The fragments themselves: `NN-element-header.png`, `NN-region-logo.png`. |
 
-The crops are cut into the work directory `.tmp/<id>/crops/` and copied next to the artifacts,
+The crops are cut into the work directory `.ai/tmp/<id>/crops/` and copied next to the artifacts,
 so the delivery is self-contained: the sheet, the report and the pictures travel together. The
-paths inside `measurements.json` and `report.md` point at the copies.
+paths inside `measurements.json` and `report.md` count from the root of the project
+(`measurements/crops/01-bishop.png`), so they mean the same thing in the sheet, in the prompt and
+in the contract of the project.
 
 ### What the measurer measures
 
@@ -374,11 +376,11 @@ is read and obeyed, and its conflicts with the reference are reported.
 ## The context of the run
 
 Every run keeps a context of its own: what it did, what it decided, and the answers the tools
-already gave. The context lives in the work directory of the run — `.tmp/<id>/context/` — and
+already gave. The context lives in the work directory of the run — `.ai/tmp/<id>/context/` — and
 dies with it.
 
 ```
-.tmp/<id>/context/
+.ai/tmp/<id>/context/
   journal.ndjson   what happened, one entry per line, in the order it happened
   state.json       what the run knows now: the pictures, the stages, the facts
   cache/           the answers the tools already gave, so nobody asks twice
@@ -412,14 +414,14 @@ A picture that is not where the model says it is does not throw an error — it 
 paths the run really has, including the hint of the same name:
 
 ```
-There is no file at `.tmp/mwh9nzfw-30a179/landing.png`.
+There is no file at `.ai/tmp/mwh9nzfw-30a179/landing.png`.
 The picture of this run is `landing.png` — open it by that path.
 ```
 
 ## The map of the run
 
 The map of a run is the index of the files of the working directory: their lines, their symbols,
-their size and the moment they changed. It lives in `.tmp/<id>/map.json` and dies with the run.
+their size and the moment they changed. It lives in `.ai/tmp/<id>/map.json` and dies with the run.
 
 ```json
 {
@@ -447,9 +449,63 @@ read from the disk again — the map never serves a stale file.
 The search knows three scopes: `path` looks at the names of the files, `content` at their text,
 `symbol` at the names the code declares, `all` at everything.
 
-The map does not read everything: it skips `.tmp`, `node_modules`, `.git` and the files with
+The map does not read everything: it skips `.ai`, `node_modules`, `.git` and the files with
 secrets, it holds at most 2000 files, and a file longer than 400 lines or bigger than 32 KiB is
 marked `partial` — for such a file the search goes to the disk.
+
+## The house of the project
+
+Every project has one directory of its own: `.ai/`. Everything a run makes that is not the
+delivery itself lives there, and nowhere else.
+
+```
+.ai/
+  tmp/<run-id>/     the state of the run: the context, the map, the design direction
+  assets/           the assets of the house
+  logs/api/         the log of the API calls
+  manifest.json     the contract of the project: what every system made and where it lies
+```
+
+The state of a run dies with the run: a new run never reads the state of the old one, and the
+old one never gets in the way of the new one. The `output.work` of the config may move the state
+elsewhere, but there is only one path, and it is computed in one place — the house.
+
+The delivery stays where the user expects it: `measurements/`. The house keeps the state, the
+assets and the contract, and it does not move the delivery.
+
+The contract is how the systems of the house find each other. Every system signs its own part
+of `.ai/manifest.json` and never touches the part of another one:
+
+```json
+{
+  "manifestVersion": 1,
+  "updatedAt": "2026-11-15T03:41:02.113Z",
+  "systems": {
+    "measurer": {
+      "delivery": "measurements/",
+      "artifacts": {
+        "measurements": "measurements/measurements.json",
+        "palette": "measurements/palette.json",
+        "tokens": "measurements/tokens.css",
+        "design": "measurements/DESIGN.md",
+        "report": "measurements/report.md",
+        "crops": "measurements/crops/",
+        "designAssets": "measurements/design-assets/"
+      },
+      "updatedAt": "2026-11-15T03:40:58.002Z"
+    }
+  }
+}
+```
+
+The paths are relative to the project and with forward slashes: the contract is read on another
+machine and another system, and the path has to mean the same thing there. A run reads the
+contract first and only then the old paths of the config, so a delivery that moved is still
+found.
+
+The files of the house are written whole: the bytes go to a file next to the target and the
+target is replaced by a rename. A reader never sees half of a file, and a run that dies in the
+middle leaves the old file and not a broken one.
 
 ## Configuration
 
@@ -499,6 +555,7 @@ The knobs a user edits most often:
 | `agent.design` | `off` \| `auto` \| `always` — when the design stage runs on its own. A stage named on the command line runs anyway. |
 | `agent.designerMaxTurns` | The tool turns the designer may spend. |
 | `output.dir` | Where the artifacts go. |
+| `output.work` | Where the state of the run goes: `.ai/tmp/` by default. It dies with the run. |
 | `context.enabled` | `false` keeps no context of the run: the stages share nothing and every answer is read again. |
 | `context.cache` | `false` keeps the journal but not the cache of the answers of the tools. |
 | `context.maxBriefChars` | How long the brief of the context may be (default 4000). |

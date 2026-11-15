@@ -26,7 +26,7 @@ import { rasterCrop, rasterInfo } from '../image/sharp.js';
 import { clampRect, sameFragment } from '../image/crop.js';
 import { CROP_PLAN_SCHEMA } from '../agent/schemas.js';
 import { attachReference, attachmentBlock, pictureBlock, splitReferences } from './references.js';
-import { CROPS_DIR, cropSlug, readStageFile, scaleBox, writeStageFile } from './artifacts.js';
+import { CROPS_DIR, cropRelPath, cropSlug, readStageFile, scaleBox, writeStageFile } from './artifacts.js';
 
 /**
  * The fragments the segmentation named.
@@ -170,7 +170,9 @@ export async function runCropStage({
             crops.push({
                 name: String(item?.name ?? ''),
                 kind: item.kind === 'asset' ? 'asset' : 'detail',
-                crop: `${CROPS_DIR}/${name}`,
+                // The path of a fragment counts from the root of the project: one base for the
+                // stage files, the prompt and the sheet of the delivery.
+                crop: cropRelPath({ root, outDir, crop: `${CROPS_DIR}/${name}` }),
                 box: rect,
                 source: source || path.basename(file),
                 role: String(item?.role ?? ''),

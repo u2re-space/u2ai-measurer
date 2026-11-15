@@ -6,13 +6,17 @@
  * The designer reads the task, the reference pictures and the `DESIGN.md` of the project, then
  * answers with a design direction: the layout, the typography, the colour palette, the spacing
  * scale and the paths of the files it wrote. The harness owns the directories: the designer may
- * only write under `.tmp/<id>/`.
+ * only write under the delivery of the run.
+ *
+ * The delivery keeps what must live: the template and the generated images go into the output
+ * directory, and the state of the run — the direction itself — stays in the house
+ * (`.ai/tmp/<id>/`) and dies with the run.
  *
  * The stage is optional: `agent.design` decides whether it runs at all — `off` never, `always`
  * always, `auto` when there are reference pictures, a `DESIGN.md`, or design words in the task.
  *
  * @depends node:path, node:fs/promises, openai/responses, roles/index, agent/schemas,
- *          stages/measure
+ *          stages/measure, stages/artifacts, shared/house
  * @usedBy shared/pipeline
  * @exports runDesignStage, shouldRunDesign, readDesignMd, clipMiddle, designContext
  * @ai.tags stage, design, templates
@@ -21,9 +25,11 @@
  */
 
 import path from 'node:path';
-import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, stat } from 'node:fs/promises';
 import { DESIGN_SCHEMA } from '../agent/schemas.js';
 import { attachReference, attachmentBlock } from './references.js';
+import { deliveryRel } from './artifacts.js';
+import { runStateDir, workRel, writeFileAtomic } from '../shared/house.js';
 
 /** How much of the `DESIGN.md` is put into the prompt. */
 export const DESIGN_MD_MAX_BYTES = 16 * 1024;
@@ -84,18 +90,33 @@ export function shouldRunDesign(config, { hasReferences = false, hasDesignMd = f
 /**
  * The prompt of the designer: the task, the references, the `DESIGN.md` and the output dirs.
  *
- * @param {{ workId: string, task?: string, references?: object[], designMd?: string, designMdRead?: boolean }} options
+ * The directories are named exactly as the project sees them, so the model writes where the
+ * delivery lies and the harness looks where the model wrote.
+ *
+ * @param {{ workId: string, config?: object, task?: string, references?: object[], designMd?: string,
+ *   designMdRead?: boolean, assetsDir?: string, templatePath?: string }} options
  * @returns {string}
  * @exports
  * @ai.hint pure
  */
-export function designContext({ workId, task = '', references = [], designMd = '', designMdRead = false }) {
-    const dir = `.tmp/${workId}`;
+export function designContext({
+    workId,
+    config = {},
+    task = '',
+    references = [],
+    designMd = '',
+    designMdRead = false,
+    assetsDir = '',
+    templatePath = '',
+}) {
+    const dir = `${workRel(config)}/${workId}`;
+    const assets = assetsDir || `${dir}/design-assets`;
+    const template = templatePath || `${dir}/design-template.html`;
     const sourceLines = references
         .map((item) => `- ${item.rel}${item.role ? ` (${item.role})` : ''}`)
         .join('\n');
     const brief = [
-        `Write only inside ${dir}/: the HTML template as ${dir}/design-template.html, generated images under ${dir}/design-assets/.`,
+        `Write only inside the delivery: the HTML template as ${template}, generated images under ${assets}/.`,
         designMdRead
             ? 'A project DESIGN.md exists (its text is below). Extract its design tokens into the designMd field, follow its conventions, and report every conflict with your direction in designMd.conflicts. Set designMd.read=true.'
             : 'No DESIGN.md was found in the project root: set designMd.read=false and leave tokens and conflicts empty.',
@@ -109,7 +130,7 @@ export function designContext({ workId, task = '', references = [], designMd = '
         sourceLines || '(no attached reference images)',
         '',
         '# Output directories',
-        `${dir}/ (template), ${dir}/design-assets/ (images)`,
+        `${template} (template), ${assets}/ (images)`,
         '',
         brief,
         designMdRead ? `\n\n# DESIGN.md\n${clipMiddle(designMd, DESIGN_MD_MAX_BYTES)}` : '',
@@ -122,8 +143,9 @@ export function designContext({ workId, task = '', references = [], designMd = '
 /**
  * Run the design stage.
  *
- * @param {{ root: string, workId: string, config: object, runner: object, toolset?: object|null,
- *   references?: object[], task?: string, notify?: Function|null, signal?: AbortSignal|null }} options
+ * @param {{ root: string, workId: string, outDir?: string|null, config: object, runner: object,
+ *   toolset?: object|null, references?: object[], task?: string, notify?: Function|null,
+ *   signal?: AbortSignal|null }} options
  * @returns {Promise<{ design: object|null, warnings: string[], saved: string|null }>}
  * @exports
  * @ai.hint io
@@ -131,6 +153,7 @@ export function designContext({ workId, task = '', references = [], designMd = '
 export async function runDesignStage({
     root,
     workId,
+    outDir = null,
     config,
     runner,
     toolset = null,
@@ -140,9 +163,12 @@ export async function runDesignStage({
     signal = null,
 }) {
     const warnings = [];
-    const dir = `.tmp/${workId}`;
-    const assetsDir = `${dir}/design-assets`;
-    const templatePath = `${dir}/design-template.html`;
+    // The delivery keeps what must live: the template and the images are part of it.
+    const delivery = deliveryRel(root, outDir);
+    const assetsDir = `${delivery}/design-assets`;
+    const templatePath = `${delivery}/design-template.html`;
+    // The state of the run dies with the run.
+    const stateRel = `${workRel(config)}/${workId}`;
 
     // The directories the designer owns.
     try {
@@ -150,7 +176,7 @@ export async function runDesignStage({
     } catch (error) {
         warnings.push(`The directory ${assetsDir} could not be created: ${error?.message ?? error}`);
     }
-    toolset?.setWriteDirs?.([path.join(root, dir)]);
+    toolset?.setWriteDirs?.([path.join(root, delivery)]);
 
     // The references the designer sees.
     const parts = [];
@@ -172,7 +198,16 @@ export async function runDesignStage({
     notify?.({ type: 'design.start', references: captions.length, designMd: designMdRead });
 
     const answer = await runner.run('designer', {
-        text: designContext({ workId, task, references: captions, designMd, designMdRead }),
+        text: designContext({
+            workId,
+            config,
+            task,
+            references: captions,
+            designMd,
+            designMdRead,
+            assetsDir,
+            templatePath,
+        }),
         parts,
         schema: DESIGN_SCHEMA,
         schemaName: 'design',
@@ -202,29 +237,30 @@ export async function runDesignStage({
         }
     }
 
-    const saved = path.join(root, dir, 'design.json');
+    const saved = path.join(runStateDir(root, workId, config), 'design.json');
     try {
         await mkdir(path.dirname(saved), { recursive: true });
-        await writeFile(saved, `${JSON.stringify(design, null, 2)}\n`, 'utf-8');
+        await writeFileAtomic(saved, `${JSON.stringify(design, null, 2)}\n`);
     } catch (error) {
         warnings.push(`The design direction was not saved: ${error?.message ?? error}`);
         return { design, warnings, saved: null };
     }
 
     notify?.({ type: 'design.done', template: design?.template?.path ?? '' });
-    return { design, warnings, saved: `.tmp/${workId}/design.json` };
+    return { design, warnings, saved: `${stateRel}/design.json` };
 }
 
 /**
  * Read back a design direction that a previous run saved.
  * @param {string} root
  * @param {string} workId
+ * @param {object} [config]
  * @returns {Promise<object|null>}
  * @exports
  * @ai.hint io
  */
-export async function readSavedDesign(root, workId) {
-    const file = path.join(root, '.tmp', workId, 'design.json');
+export async function readSavedDesign(root, workId, config = {}) {
+    const file = path.join(runStateDir(root, workId, config), 'design.json');
     const info = await stat(file).catch(() => null);
     if (!info?.isFile()) return null;
     return await readFile(file, 'utf-8').then((text) => JSON.parse(text)).catch(() => null);

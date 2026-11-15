@@ -479,8 +479,9 @@ test('the crop stage cuts the fragments the segmentation named', async () => {
         });
         // The zone that is marked "none" is not cut.
         assert.equal(result.crops.length, 2);
-        assert.equal(result.crops[0].crop, 'crops/01-asset-badge.png');
-        assert.equal(result.crops[1].crop, 'crops/02-detail-caption.png');
+        // The path of a fragment counts from the root of the project.
+        assert.equal(result.crops[0].crop, 'measurements/crops/01-asset-badge.png');
+        assert.equal(result.crops[1].crop, 'measurements/crops/02-detail-caption.png');
         assert.ok(await stat(path.join(outDir, 'crops', '01-asset-badge.png')).then((info) => info.isFile()));
         const written = JSON.parse(await readFile(path.join(outDir, 'stages', 'crops.json'), 'utf-8'));
         assert.equal(written.crops.length, 2);
@@ -709,8 +710,8 @@ test('the design stage reads the DESIGN.md and saves the direction', async () =>
             task: 'a landing page',
         });
         assert.ok(result.design);
-        assert.equal(result.saved, '.tmp/w1/design.json');
-        const saved = JSON.parse(await readFile(path.join(root, '.tmp', 'w1', 'design.json'), 'utf-8'));
+        assert.equal(result.saved, '.ai/tmp/w1/design.json');
+        const saved = JSON.parse(await readFile(path.join(root, '.ai', 'tmp', 'w1', 'design.json'), 'utf-8'));
         assert.equal(saved.summary, DESIGN.summary);
         assert.equal(saved.designMd.read, true);
     } finally {
@@ -888,13 +889,13 @@ test('the elements carry the numbers of the geometry and the texts of the recogn
 test('the crops travel with the artifacts', async () => {
     const { root, cleanup } = await workspace();
     try {
-        // A crop in the work directory, as an older run leaves it.
-        const work = path.join(root, '.tmp', 'w1', 'crops');
+        // A crop in the work directory of the house, as an older run leaves it.
+        const work = path.join(root, '.ai', 'tmp', 'w1', 'crops');
         await mkdir(work, { recursive: true });
         await writeFile(path.join(work, '01-asset-badge.png'), 'PNG');
         const outDir = path.join(root, 'measurements');
         await writeParts(outDir, [{
-            kind: 'asset', name: 'badge', crop: '.tmp/w1/crops/01-asset-badge.png',
+            kind: 'asset', name: 'badge', crop: '.ai/tmp/w1/crops/01-asset-badge.png',
             box: { x: 10, y: 10, width: 20, height: 20 }, source: 'picture.png',
         }]);
         const state = { root, config: { output: { dir: './measurements' } }, outDir, warnings: [] };
@@ -902,12 +903,13 @@ test('the crops travel with the artifacts', async () => {
         const copy = path.join(outDir, 'crops', '01-asset-badge.png');
         assert.ok(await stat(copy).then((info) => info.isFile()), 'the crop is not in the output');
         const measurements = JSON.parse(await readFile(path.join(outDir, 'measurements.json'), 'utf-8'));
-        assert.equal(measurements.crops[0].crop, 'crops/01-asset-badge.png');
-        assert.equal(measurements.regions[0].crop, 'crops/01-asset-badge.png');
-        assert.doesNotMatch(JSON.stringify(measurements), /\.tmp\/w1/);
+        // The path of a fragment counts from the root of the project.
+        assert.equal(measurements.crops[0].crop, 'measurements/crops/01-asset-badge.png');
+        assert.equal(measurements.regions[0].crop, 'measurements/crops/01-asset-badge.png');
+        assert.doesNotMatch(JSON.stringify(measurements), /\.ai\/tmp\/w1/);
         const report = await readFile(path.join(outDir, 'report.md'), 'utf-8');
         assert.match(report, /crops\/01-asset-badge\.png/);
-        assert.doesNotMatch(report, /\.tmp\/w1/);
+        assert.doesNotMatch(report, /\.ai\/tmp\/w1/);
     } finally {
         await cleanup();
     }
@@ -918,13 +920,13 @@ test('a crop that is not there keeps its old path', async () => {
     try {
         const outDir = path.join(root, 'measurements');
         await writeParts(outDir, [{
-            kind: 'asset', name: 'badge', crop: '.tmp/w1/crops/gone.png',
+            kind: 'asset', name: 'badge', crop: '.ai/tmp/w1/crops/gone.png',
             box: { x: 10, y: 10, width: 20, height: 20 }, source: 'picture.png',
         }]);
         const state = { root, config: { output: { dir: './measurements' } }, outDir, warnings: [] };
         await runResolve(state, () => {});
         const measurements = JSON.parse(await readFile(path.join(root, 'measurements', 'measurements.json'), 'utf-8'));
-        assert.equal(measurements.crops[0].crop, '.tmp/w1/crops/gone.png');
+        assert.equal(measurements.crops[0].crop, '.ai/tmp/w1/crops/gone.png');
         assert.ok(state.warnings.length >= 1);
     } finally {
         await cleanup();

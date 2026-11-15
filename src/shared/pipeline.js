@@ -27,7 +27,9 @@ import { openContext } from '../agent/context.js';
 import { openRunMap } from '../agent/run-map.js';
 import { STAGE_DEFS, STAGE_DIRS, STAGE_ROLES, shouldRunDesign } from '../stages/index.js';
 import { MEASUREMENTS_FILE } from '../stages/resolve.js';
+import { publishDelivery } from '../stages/publish.js';
 import { isInside, toPosix } from '../agent/paths.js';
+import { runStateDir, workRel } from './house.js';
 
 /**
  * The stages of the pipeline, in order.
@@ -57,12 +59,12 @@ export function newWorkId() {
  * into the work directory first: every tool of the agent is bound to the working directory, and a
  * reference that no tool may open is a reference the measurer cannot crop.
  *
- * @param {{ root: string, workId: string, images?: string[] }} options
+ * @param {{ root: string, workId: string, config?: object, images?: string[] }} options
  * @returns {Promise<{ references: Array<{ kind: string, rel: string, abs: string }>, warnings: string[] }>}
  * @exports
  * @ai.hint io
  */
-export async function stageReferences({ root, workId, images = [] }) {
+export async function stageReferences({ root, workId, config = {}, images = [] }) {
     const references = [];
     const warnings = [];
     let outside = 0;
@@ -91,7 +93,7 @@ export async function stageReferences({ root, workId, images = [] }) {
             continue;
         }
         outside += 1;
-        const dir = path.join(root, '.tmp', workId, 'references');
+            const dir = path.join(runStateDir(root, workId, config), 'references');
         await mkdir(dir, { recursive: true });
         const target = path.join(dir, path.basename(abs));
         try {
@@ -103,7 +105,7 @@ export async function stageReferences({ root, workId, images = [] }) {
         references.push({ kind: 'original', rel: toPosix(path.relative(root, target)), abs: target });
     }
     if (outside) {
-        warnings.push(`${outside} reference(s) from outside the working directory were copied into .tmp/${workId}/references/.`);
+        warnings.push(`${outside} reference(s) from outside the working directory were copied into ${workRel(config)}/${workId}/references/.`);
     }
     return { references, warnings };
 }
@@ -136,12 +138,12 @@ export async function runPipeline({
     notify = () => {},
 }) {
     const id = workId ?? newWorkId();
-    const workDir = path.join(root, '.tmp', id);
+    const workDir = runStateDir(root, id, config);
     // The output directory is absolute: the stages write their files into it, and a relative
     // path would be relative to the process, not to the working directory of the run.
     const outputDir = path.resolve(root, outDir ?? config?.output?.dir ?? './measurements');
 
-    const { references, warnings: referenceWarnings } = await stageReferences({ root, workId: id, images });
+    const { references, warnings: referenceWarnings } = await stageReferences({ root, workId: id, config, images });
     const warnings = [...referenceWarnings];
     // The references are what the run reads: the reader sees them before the model does.
     notify({
@@ -225,6 +227,7 @@ export async function runPipeline({
     const context = await openContext({
         root,
         workId: id,
+        config,
         enabled: config?.context?.enabled !== false,
         cache: config?.context?.cache !== false,
         maxBriefChars: config?.context?.maxBriefChars,
@@ -236,6 +239,7 @@ export async function runPipeline({
     const map = await openRunMap({
         root,
         workId: id,
+        config,
         build: config?.map?.enabled !== false,
         depth: config?.map?.depth,
         maxFiles: config?.map?.maxFiles,
@@ -292,6 +296,14 @@ export async function runPipeline({
     };
 
     const failed = await runStages(toRun, state, notify);
+
+    // The contract of the project: what this run made and where it lies. The other systems
+    // of the house read it to find the work of this one.
+    try {
+        await publishDelivery(root, config, state);
+    } catch (cause) {
+        state.warnings.push(`The contract of the project was not written: ${cause?.message ?? cause}`);
+    }
 
     // The digest of the run: what a person reads after it. The context of the run is the
     // witness of what happened, and it dies with the run.

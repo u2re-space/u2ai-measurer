@@ -84,7 +84,7 @@ export const defaults = {
   logging: {
     enabled: false,
     /** Where the records are written, relative to the working directory. */
-    dir: '.tmp/api',
+    dir: '.ai/logs/api',
   },
 
   // --- limits ---------------------------------------------------------------
@@ -264,8 +264,14 @@ export const defaults = {
     },
   },
 
-  /** Where pipeline artifacts are written, relative to cwd. */
-  output: { dir: './measurements', file: './measurements.json' },
+  /**
+   * Where the artifacts of a run are written, relative to cwd.
+   *
+   * `dir` is the delivery of the run: it stays where the user expects it. `work` is the state
+   * of the run: it lives in the house of the project (`.ai/tmp/`) and dies with the run. The
+   * path is computed in one place — `shared/house.js`.
+   */
+  output: { dir: './measurements', file: './measurements.json', work: './.ai/tmp' },
 
   // --- roles ----------------------------------------------------------------
   /**

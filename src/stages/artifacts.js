@@ -13,16 +13,20 @@
  *   recognition.json   the texts and the typography
  *   palette.json       the colours
  *
- * @depends node:path, node:fs/promises
+ * The path of a fragment is counted from the root of the project — the stage files, the prompt
+ * and the sheet of the delivery name it the same way.
+ *
+ * @depends node:path, node:fs/promises, shared/house
  * @usedBy stages
  * @exports STAGES_DIR, CROPS_DIR, stageFile, writeStageFile, readStageFile, zoneList, scaleBox,
- *          cropSlug, cropRelPath
+ *          cropSlug, cropRelPath, deliveryRel
  * @ai.tags stages, artifacts
  * @ai.hint io
  */
 
 import path from 'node:path';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { readFile } from 'node:fs/promises';
+import { writeFileAtomic } from '../shared/house.js';
 
 /** The directory of the stage files, relative to the output directory. */
 export const STAGES_DIR = 'stages';
@@ -44,6 +48,9 @@ export function stageFile(outDir, name) {
 
 /**
  * Write the file of one stage.
+ *
+ * The write is atomic: the file appears whole, so a stage that dies in the middle leaves the
+ * old file and not half of a new one.
  * @param {string} outDir the output directory
  * @param {string} name the name of the stage
  * @param {object} data the content of the file
@@ -53,8 +60,7 @@ export function stageFile(outDir, name) {
  */
 export async function writeStageFile(outDir, name, data) {
     const file = stageFile(outDir, name);
-    await mkdir(path.dirname(file), { recursive: true });
-    await writeFile(file, `${JSON.stringify(data, null, 2)}\n`, 'utf8');
+    await writeFileAtomic(file, `${JSON.stringify(data, null, 2)}\n`);
     return file;
 }
 
@@ -118,11 +124,31 @@ export function cropSlug(value, fallback = 'crop') {
 }
 
 /**
+ * The delivery of the run, as the project sees it: relative, with slashes.
+ *
+ * The delivery is where the run puts what it made: `measurements/` by default. The path is
+ * counted from the root of the project, so it means the same thing in the prompt, in the
+ * manifest and in the contract of the project.
+ * @param {string} root the root of the project
+ * @param {string|null} [outDir] the delivery, absolute or relative to the root
+ * @returns {string}
+ * @exports
+ * @ai.hint pure
+ */
+export function deliveryRel(root, outDir = null) {
+    const base = path.resolve(String(root ?? '.'));
+    const abs = outDir ? path.resolve(base, outDir) : base;
+    const rel = path.relative(base, abs);
+    if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) return '.';
+    return rel.split(path.sep).join('/');
+}
+
+/**
  * The path of a fragment the way the model has to name it.
  *
- * The fragments lie in the output directory, but the model works in the root of the run: a path
- * that starts from the output directory does not open there. The path is therefore counted from
- * the root, and it is written with slashes, the way the model reads it.
+ * One base for every path of a fragment: the stage files, the prompt and the sheet of the
+ * delivery name it from the root of the project. A path of an older run counts from the
+ * delivery and is repointed to the root.
  * @param {{ root: string, outDir?: string|null, crop?: string }} options
  * @returns {string}
  * @exports
@@ -130,9 +156,15 @@ export function cropSlug(value, fallback = 'crop') {
  */
 export function cropRelPath({ root, outDir = null, crop = '' }) {
     const base = path.resolve(String(root ?? '.'));
-    const abs = path.resolve(outDir ? path.resolve(base, outDir) : base, String(crop ?? ''));
-    const rel = path.relative(base, abs);
-    return rel.split(path.sep).join('/');
+    const text = String(crop ?? '').trim().replace(/\\/g, '/');
+    if (!text) return '';
+    if (path.isAbsolute(text)) return text.split(path.sep).join('/');
+    const delivery = deliveryRel(root, outDir);
+    if (delivery !== '.' && !text.startsWith(`${delivery}/`)) {
+        const rel = path.relative(base, path.resolve(base, delivery, text));
+        if (!rel.startsWith('..') && !path.isAbsolute(rel)) return rel.split(path.sep).join('/');
+    }
+    return text;
 }
 
 /**

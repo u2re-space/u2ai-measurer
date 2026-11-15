@@ -18,12 +18,35 @@
  */
 
 import path from 'node:path';
+import { stat } from 'node:fs/promises';
 import { RECOGNITION_SCHEMA } from '../agent/schemas.js';
 import { attachImage, attachmentBlock, pictureBlock, splitReferences } from './references.js';
 import { cropRelPath, readStageFile, writeStageFile } from './artifacts.js';
 
 /** How many fragments one call may carry. */
 const MAX_FRAGMENTS = 12;
+
+/**
+ * Find a fragment on the disk.
+ *
+ * The law of the house counts the path of a fragment from the root of the project. The stage
+ * files of an older run count it from the delivery, so both places are tried.
+ * @param {string} root the root of the project
+ * @param {string|null} outDir the delivery of the run
+ * @param {string} crop the path of the fragment
+ * @returns {Promise<string>} the absolute path of the fragment
+ * @ai.hint io
+ */
+async function findFragment(root, outDir, crop) {
+    const text = String(crop ?? '').trim();
+    const fromRoot = path.resolve(root, text);
+    if (await stat(fromRoot).then((info) => info.isFile()).catch(() => false)) return fromRoot;
+    if (outDir) {
+        const fromDelivery = path.resolve(root, outDir, text);
+        if (await stat(fromDelivery).then((info) => info.isFile()).catch(() => false)) return fromDelivery;
+    }
+    return fromRoot;
+}
 
 /**
  * Run the recognition stage.
@@ -67,7 +90,9 @@ export async function runRecognizeStage({
         // The fragments of the text zones first: they are the readable ones.
         const fragments = crops.filter((crop) => String(crop?.source ?? '') === source).slice(0, MAX_FRAGMENTS);
         for (const fragment of fragments) {
-            const file = path.resolve(outDir ?? root, fragment.crop);
+            // The path of a fragment counts from the root of the project. The stage files of an
+            // older run count from the delivery: the fragment is looked for in both places.
+            const file = await findFragment(root, outDir, fragment.crop);
             const image = await attachImage({ abs: file, config });
             if (!image) continue;
             parts.push(image.part);

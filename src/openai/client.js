@@ -164,10 +164,10 @@ export function resolveBackends(config, { kind = 'text', model = null, env = pro
  *
  * The client owns the transport only: it knows the routes, the retries and the rotation
  * between hosts. What a request means is decided by the caller (roles, stages).
- * @param {{ config: object, env?: object, signal?: AbortSignal|null, onEvent?: Function|null }} opts
+ * @param {{ config: object, env?: object, signal?: AbortSignal|null, onEvent?: Function|null, root?: string }} opts
  * @returns {Promise<object>}
  */
-export async function createClient({ config, env = process.env, signal = null, onEvent = null } = {}) {
+export async function createClient({ config, env = process.env, signal = null, onEvent = null, root = process.cwd() } = {}) {
     const transport = createHttp({
         idleTimeoutMs: Number.isSafeInteger(config?.timeoutMs) ? config.timeoutMs : 900_000,
         connectTimeoutMs: 30_000,
@@ -178,8 +178,10 @@ export async function createClient({ config, env = process.env, signal = null, o
     const announce = (event) => { try { onEvent?.(event); } catch { /* an observer never breaks a request */ } };
 
     // The log of the calls: one JSON record per request, with the whole chain of hosts.
+    // The records live in the house of the project: `.ai/logs/api/`.
     const logger = createApiLogger({
         dir: config?.logging?.enabled ? (config?.logging?.dir ?? null) : null,
+        cwd: root,
     });
 
     /**

@@ -3,7 +3,7 @@
  * @module agent/context
  * @purpose The context of a run: what it did, what it decided and the answers it already has.
  *
- *   The context lives in the directory of the run — `.tmp/<id>/context/` — and dies with it.
+ *   The context lives in the directory of the run — `.ai/tmp/<id>/context/` — and dies with it.
  *   It is not the permanent memory of the project: it holds what *this* run knows, so a new
  *   run starts with a clean head and an old run never pollutes the new one.
  *
@@ -28,7 +28,8 @@
 
 import path from 'node:path';
 import { createHash } from 'node:crypto';
-import { appendFile, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { appendFile, mkdir, readFile } from 'node:fs/promises';
+import { runStateDir, workRel, writeFileAtomic } from '../shared/house.js';
 
 /** The name of the directory of the context inside the directory of the run. */
 export const CONTEXT_DIR = 'context';
@@ -55,23 +56,25 @@ const MAX_BRIEF = 4000;
  * The directory of the context of a run.
  * @param {string} root the working directory of the run
  * @param {string} workId the id of the run
+ * @param {object} [config] the config of the run
  * @returns {string}
  * @exports
  * @ai.hint pure
  */
-export function contextDirectory(root, workId) {
-    return path.join(path.resolve(String(root ?? '.')), '.tmp', String(workId ?? ''), CONTEXT_DIR);
+export function contextDirectory(root, workId, config = {}) {
+    return path.join(runStateDir(root, workId, config), CONTEXT_DIR);
 }
 
 /**
  * The path of the context of a run, the way the model reads it.
  * @param {string} workId the id of the run
+ * @param {object} [config] the config of the run
  * @returns {string}
  * @exports
  * @ai.hint pure
  */
-export function contextRel(workId) {
-    return `.tmp/${String(workId ?? '')}/${CONTEXT_DIR}`;
+export function contextRel(workId, config = {}) {
+    return `${workRel(config)}/${String(workId ?? '')}/${CONTEXT_DIR}`;
 }
 
 /**
@@ -168,7 +171,7 @@ export function buildBrief(state, { maxChars = MAX_BRIEF } = {}) {
  *
  * A context that is switched off is still an object: every method of it does nothing and
  * never fails, so the caller needs no branches.
- * @param {{ root: string, workId: string, enabled?: boolean, cache?: boolean, maxBriefChars?: number }} options
+ * @param {{ root: string, workId: string, config?: object, enabled?: boolean, cache?: boolean, maxBriefChars?: number }} options
  * @returns {Promise<object>} the context of the run
  * @exports
  * @ai.hint io
@@ -176,13 +179,14 @@ export function buildBrief(state, { maxChars = MAX_BRIEF } = {}) {
 export async function openContext({
     root,
     workId,
+    config = {},
     enabled = true,
     cache = true,
     maxBriefChars = MAX_BRIEF,
 } = {}) {
     const id = String(workId ?? '');
-    const dir = contextDirectory(root, id);
-    const rel = contextRel(id);
+    const dir = contextDirectory(root, id, config);
+    const rel = contextRel(id, config);
 
     const state = emptyState(id);
     const entries = [];
@@ -208,7 +212,7 @@ export async function openContext({
      */
     const saveState = async () => {
         state.updatedAt = new Date().toISOString();
-        await writeFile(path.join(dir, STATE_FILE), `${JSON.stringify(state, null, 2)}\n`, 'utf8');
+        await writeFileAtomic(path.join(dir, STATE_FILE), `${JSON.stringify(state, null, 2)}\n`);
     };
 
     const context = {
@@ -400,10 +404,9 @@ export async function openContext({
             if (!cache) return;
             try {
                 await mkdir(path.join(dir, CACHE_DIR), { recursive: true });
-                await writeFile(
+                await writeFileAtomic(
                     path.join(dir, CACHE_DIR, `${cacheKeyFor(key)}.json`),
                     `${JSON.stringify(value ?? null)}\n`,
-                    'utf8',
                 );
             } catch { /* a cache that cannot be written is only slower */ }
         },
@@ -483,7 +486,7 @@ export async function openContext({
                 }
                 await mkdir(dir, { recursive: true });
                 const file = path.join(dir, NOTES_FILE);
-                await writeFile(file, lines.join('\n'), 'utf8');
+                await writeFileAtomic(file, lines.join('\n'));
                 return file;
             } catch {
                 return null;

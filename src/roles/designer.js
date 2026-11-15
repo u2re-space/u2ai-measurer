@@ -55,20 +55,19 @@ font pairing sites, colour palette generators). Verify the content is reasonable
 This CLI has no image generator of its own: call_ai_image runs the external \`ai-image\` CLI.
 Use sizes: 3072x2048 (high-res hero/wide), 1536x1024 (standard desktop), 1920x1080 (desktop 16:9),
 or 640x1280 (mobile portrait). Choose the size based on the asset purpose. Write generated images
-under .tmp/<id>/design-assets/ and name them descriptively (e.g. hero-background.png).
+into the images directory named in the task and name them descriptively (e.g. hero-background.png).
 
 ## Template
 
-Write a minimal HTML skeleton to .tmp/<id>/design-template.html. Include only structure:
+Write a minimal HTML skeleton to the template file named in the task. Include only structure:
 section elements with semantic class names, placeholder content, and links to where styles
 and scripts will go. Do not write CSS or JS — the styler and worker handle that. The template
 is a starting point for the worker, not a finished page.
 
 ## Output discipline
 
-Write only inside .tmp/<id>/ — the template under the work directory root, generated images
-under .tmp/<id>/design-assets/. Never write outside this directory. Return the JSON describing
-what you produced.
+Write only inside the directories named in the task — the delivery of the run, its template and
+its images directory. Never write outside them. Return the JSON describing what you produced.
 
 ## Downstream roles
 

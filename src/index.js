@@ -37,3 +37,5 @@ export * from './stages/sample.js';
 export * from './stages/measure.js';
 export * from './stages/design.js';
 export * from './stages/resolve.js';
+export * from './stages/publish.js';
+export * from './shared/house.js';

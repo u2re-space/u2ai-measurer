@@ -28,10 +28,11 @@
  */
 
 import path from 'node:path';
-import { cp, mkdir, stat, writeFile } from 'node:fs/promises';
+import { cp, mkdir, stat } from 'node:fs/promises';
 import { MEASUREMENT_SCHEMA } from '../agent/schemas.js';
-import { cropSlug, readStageFile } from './artifacts.js';
+import { cropSlug, deliveryRel, readStageFile } from './artifacts.js';
 import { toPosix } from '../agent/paths.js';
+import { writeFileAtomic } from '../shared/house.js';
 
 /** The names of the artifacts, inside the output directory. */
 export const MEASUREMENTS_FILE = 'measurements.json';
@@ -45,9 +46,12 @@ export const CROPS_DIR = 'crops';
 /**
  * Copy the fragments next to the artifacts.
  *
- * The fragments of the crop stage already lie in the output directory; the ones of an older run
- * may still be in the work directory, which is scratch. A fragment that cannot be copied keeps
+ * The fragments of the crop stage already lie in the delivery; the ones of an older run may
+ * still be in the work directory, which is scratch. A fragment that cannot be copied keeps
  * its old path — a missing file is better than a wrong path.
+ *
+ * The path of a fragment counts from the root of the project, in the stage files and in the
+ * sheet of the delivery alike.
  *
  * @param {string} root the working directory
  * @param {string} target the output directory
@@ -61,29 +65,45 @@ export async function collectCrops(root, target, crops = [], warnings = []) {
     const map = new Map();
     if (!Array.isArray(crops) || !crops.length) return { crops: [], map };
     const dir = path.join(target, CROPS_DIR);
+    const delivery = deliveryRel(root, target);
     const copied = [];
     for (const item of crops) {
         const source = toPosix(String(item?.crop ?? ''));
         if (!source) continue;
-        // A fragment that already lies in the output directory stays where it is.
-        const placed = path.resolve(target, source);
-        if (await stat(placed).then((info) => info.isFile()).catch(() => false)) {
-            map.set(source, source);
+        const name = path.basename(source);
+        const inDelivery = path.join(dir, name);
+        const rel = toPosix(path.join(delivery, CROPS_DIR, name));
+        // A fragment that already lies in the delivery stays where it is.
+        if (await stat(inDelivery).then((info) => info.isFile()).catch(() => false)) {
+            map.set(source, rel);
+            copied.push({ ...item, crop: rel });
+            continue;
+        }
+        // The fragment lies in the root of the project (the law of the house) or, in the files
+        // of an older run, in the delivery or in the work directory.
+        const places = [path.resolve(root, source)];
+        if (delivery !== '.') places.push(path.resolve(root, delivery, source));
+        let found = null;
+        for (const place of places) {
+            if (await stat(place).then((info) => info.isFile()).catch(() => false)) {
+                found = place;
+                break;
+            }
+        }
+        if (!found) {
+            // A missing file keeps its old path — a missing file is better than a wrong path.
+            warnings.push(`resolve: the crop ${source} is not there: its path stays as it is.`);
             copied.push(item);
             continue;
         }
-        const from = path.resolve(root, source);
-        const name = path.basename(from);
-        const to = path.join(dir, name);
         try {
             await mkdir(dir, { recursive: true });
-            await cp(from, to, { force: true });
+            await cp(found, inDelivery, { force: true });
         } catch (error) {
             warnings.push(`resolve: the crop ${source} was not copied (${error?.message ?? error})`);
             copied.push(item);
             continue;
         }
-        const rel = toPosix(path.join(CROPS_DIR, name));
         map.set(source, rel);
         copied.push({ ...item, crop: rel });
     }
@@ -635,7 +655,7 @@ export async function runResolve(state, notify = () => {}) {
     for (const file of files) {
         const target3 = path.join(target, file.name);
         try {
-            await writeFile(target3, file.content, 'utf-8');
+            await writeFileAtomic(target3, file.content);
             written.push(toPosix(path.relative(root, target3)));
             // Every file of the delivery is named as it is written.
             notify({

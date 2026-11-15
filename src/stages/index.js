@@ -66,6 +66,7 @@ async function designStage(state, notify) {
     const result = await runDesignStage({
         root: state.root,
         workId: state.workId,
+        outDir: state.outDir,
         config: state.config,
         runner: state.roles,
         toolset: state.toolset,

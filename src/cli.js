@@ -419,6 +419,8 @@ export async function main(argv = process.argv.slice(2)) {
         const client = await createClient({
             config,
             signal: null,
+            // The log of the calls belongs to the house of the project, not to the shell.
+            root: process.cwd(),
             // The events of the client go straight to the renderer: the heartbeat of a waiting
             // request and a failed backend are part of what the reader has to see.
             onEvent: (event) => renderer.event(event),

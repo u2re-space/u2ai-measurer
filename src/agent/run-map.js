@@ -4,7 +4,7 @@
  * @purpose The map of a run: the index of the files of the working directory, with their lines
  *          and their symbols — the search of the run reads it instead of the disk.
  *
- *   The map lives in the directory of the run — `.tmp/<id>/map.json` — and dies with it. A new
+ *   The map lives in the directory of the run — `.ai/tmp/<id>/map.json` — and dies with it. A new
  *   run builds a new map: nothing of the old one leaks into the new one, and the map is never
  *   stale, because it belongs to the run that wrote it.
  *
@@ -28,7 +28,8 @@
  */
 
 import path from 'node:path';
-import { mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, stat } from 'node:fs/promises';
+import { runStateDir, workRel, writeFileAtomic } from '../shared/house.js';
 
 /** The name of the map inside the directory of the run. */
 export const RUN_MAP_FILE = 'map.json';
@@ -36,8 +37,8 @@ export const RUN_MAP_FILE = 'map.json';
 /** The version of the format of the map. */
 export const RUN_MAP_VERSION = 1;
 
-/** The directories the map never enters. */
-const NOISY = /^(?:\.git|node_modules|\.tmp|\.hg|\.svn|dist|build|coverage|\.next|\.nuxt|\.cache|\.venv|venv|__pycache__|target)$/i;
+/** The directories the map never enters: the house of the project and the old work directory. */
+const NOISY = /^(?:\.git|node_modules|\.ai|\.tmp|\.hg|\.svn|dist|build|coverage|\.next|\.nuxt|\.cache|\.venv|venv|__pycache__|target)$/i;
 
 /** The files the map never reads. */
 const SECRET = /^(?:\.env(?:\..*)?|\.npmrc|\.netrc|\.pypirc|credentials(?:\..*)?|secrets?(?:\..*)?|.*\.(?:pem|key|p12|pfx|jks|keystore))$/i;
@@ -70,23 +71,25 @@ const CODE_SYMBOLS = [
  * The path of the map of a run.
  * @param {string} root the working directory of the run
  * @param {string} workId the id of the run
+ * @param {object} [config] the config of the run
  * @returns {string}
  * @exports
  * @ai.hint pure
  */
-export function runMapFile(root, workId) {
-    return path.join(path.resolve(String(root ?? '.')), '.tmp', String(workId ?? ''), RUN_MAP_FILE);
+export function runMapFile(root, workId, config = {}) {
+    return path.join(runStateDir(root, workId, config), RUN_MAP_FILE);
 }
 
 /**
  * The path of the map of a run, the way the model reads it.
  * @param {string} workId the id of the run
+ * @param {object} [config] the config of the run
  * @returns {string}
  * @exports
  * @ai.hint pure
  */
-export function runMapRel(workId) {
-    return `.tmp/${String(workId ?? '')}/${RUN_MAP_FILE}`;
+export function runMapRel(workId, config = {}) {
+    return `${workRel(config)}/${String(workId ?? '')}/${RUN_MAP_FILE}`;
 }
 
 /**
@@ -210,7 +213,7 @@ async function walk(root, dirRel, out, depth, maxFiles) {
 
 /**
  * Build the map of a run and write it to the disk.
- * @param {{ root: string, workId: string, paths?: string[]|null, depth?: number,
+ * @param {{ root: string, workId: string, config?: object, paths?: string[]|null, depth?: number,
  *   maxFiles?: number, maxFileBytes?: number, maxLines?: number }} options
  * @returns {Promise<object>} the map
  * @exports
@@ -219,6 +222,7 @@ async function walk(root, dirRel, out, depth, maxFiles) {
 export async function buildRunMap({
     root,
     workId,
+    config = {},
     paths = null,
     depth = 8,
     maxFiles = 2000,
@@ -241,33 +245,33 @@ export async function buildRunMap({
         root: '.',
         files,
     };
-    await saveRunMap({ root, workId, map });
+    await saveRunMap({ root, workId, config, map });
     return map;
 }
 
 /**
  * Write the map of a run.
- * @param {{ root: string, workId: string, map: object }} options
+ * @param {{ root: string, workId: string, config?: object, map: object }} options
  * @returns {Promise<string>} the path of the file
  * @exports
  * @ai.hint io
  */
-export async function saveRunMap({ root, workId, map }) {
-    const file = runMapFile(root, workId);
+export async function saveRunMap({ root, workId, config = {}, map }) {
+    const file = runMapFile(root, workId, config);
     await mkdir(path.dirname(file), { recursive: true });
-    await writeFile(file, `${JSON.stringify(map, null, 2)}\n`, 'utf8');
+    await writeFileAtomic(file, `${JSON.stringify(map, null, 2)}\n`);
     return file;
 }
 
 /**
  * Read the map of a run. A missing or broken map gives null.
- * @param {{ root: string, workId: string }} options
+ * @param {{ root: string, workId: string, config?: object }} options
  * @returns {Promise<object|null>}
  * @exports
  * @ai.hint io
  */
-export async function loadRunMap({ root, workId }) {
-    const text = await readFile(runMapFile(root, workId), 'utf8').catch(() => null);
+export async function loadRunMap({ root, workId, config = {} }) {
+    const text = await readFile(runMapFile(root, workId, config), 'utf8').catch(() => null);
     if (text === null) return null;
     try {
         const parsed = JSON.parse(text);
@@ -281,21 +285,21 @@ export async function loadRunMap({ root, workId }) {
 
 /**
  * Index one file again and write the map back.
- * @param {{ root: string, workId: string, rel: string, map?: object|null,
+ * @param {{ root: string, workId: string, config?: object, rel: string, map?: object|null,
  *   maxFileBytes?: number, maxLines?: number }} options
  * @returns {Promise<object|null>} the map
  * @exports
  * @ai.hint io
  */
-export async function updateRunMap({ root, workId, rel, map = null, maxFileBytes, maxLines }) {
-    const current = map ?? await loadRunMap({ root, workId });
+export async function updateRunMap({ root, workId, config = {}, rel, map = null, maxFileBytes, maxLines }) {
+    const current = map ?? await loadRunMap({ root, workId, config });
     if (!current) return null;
     const posix = String(rel ?? '').replaceAll('\\', '/');
     const record = await indexFile(root, posix, { maxFileBytes, maxLines });
     if (record) current.files[posix] = record;
     else delete current.files[posix];
     current.builtAt = new Date().toISOString();
-    await saveRunMap({ root, workId, map: current });
+    await saveRunMap({ root, workId, config, map: current });
     return current;
 }
 
@@ -474,8 +478,8 @@ export function mapSummary(map, { maxChars = 2000, maxFiles = 60 } = {}) {
  *
  * The handle keeps the map in the memory and writes it back when a file of the run changes,
  * so the search of the tools never walks the disk twice.
- * @param {{ root: string, workId: string, build?: boolean, depth?: number, maxFiles?: number,
- *   maxFileBytes?: number, maxLines?: number }} options
+ * @param {{ root: string, workId: string, config?: object, build?: boolean, depth?: number,
+ *   maxFiles?: number, maxFileBytes?: number, maxLines?: number }} options
  * @returns {Promise<object>} the handle of the map
  * @exports
  * @ai.hint io
@@ -483,20 +487,21 @@ export function mapSummary(map, { maxChars = 2000, maxFiles = 60 } = {}) {
 export async function openRunMap({
     root,
     workId,
+    config = {},
     build = true,
     depth = 8,
     maxFiles = 2000,
     maxFileBytes = 32 * 1024,
     maxLines = 400,
 } = {}) {
-    let data = await loadRunMap({ root, workId });
+    let data = await loadRunMap({ root, workId, config });
     if (!data && build) {
-        data = await buildRunMap({ root, workId, depth, maxFiles, maxFileBytes, maxLines });
+        data = await buildRunMap({ root, workId, config, depth, maxFiles, maxFileBytes, maxLines });
     }
     const handle = {
         enabled: Boolean(data),
-        path: runMapFile(root, workId),
-        rel: runMapRel(workId),
+        path: runMapFile(root, workId, config),
+        rel: runMapRel(workId, config),
         data: data ?? { version: RUN_MAP_VERSION, id: String(workId ?? ''), files: {} },
         /**
          * The files the map knows.
