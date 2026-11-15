@@ -409,7 +409,7 @@ The starter file:
 ```json
 {
   "model": "moonshotai/kimi-k3.1-pro",
-  "reasoning": { "effort": "xhigh", "summary": "auto" },
+  "reasoning": { "effort": "high", "summary": "auto" },
   "backends": [
     { "baseURL": "https://routerai.ru/api/v1", "env": "ROUTERAI_API_KEY" }
   ],
@@ -418,12 +418,12 @@ The starter file:
     "designerMaxTurns": 16
   },
   "stages": {
-    "segmentate": { "enabled": true, "effort": "medium", "maxTurns": 6 },
+    "segmentate": { "enabled": true, "effort": "high", "maxTurns": 6 },
     "crop": { "enabled": true, "mode": "local", "effort": "medium", "maxTurns": 6 },
-    "measure": { "enabled": true, "effort": "xhigh", "maxTurns": 8 },
-    "recognize": { "enabled": true, "effort": "xhigh", "maxTurns": 8 },
-    "sample": { "enabled": true, "mode": "local", "localEffort": "low", "aiEffort": "xhigh" },
-    "resolve": { "enabled": true, "mode": "local", "effort": "medium" },
+    "measure": { "enabled": true, "effort": "high", "maxTurns": 8 },
+    "recognize": { "enabled": true, "effort": "high", "maxTurns": 8 },
+    "sample": { "enabled": true, "mode": "local", "localEffort": "low", "aiEffort": "high" },
+    "resolve": { "enabled": true, "mode": "local", "effort": "high" },
     "design": { "enabled": true, "effort": "xhigh", "maxTurns": 16 }
   }
 }

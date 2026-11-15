@@ -193,14 +193,14 @@ export const defaults = {
       /** Max agent turns the segmentator may spend. */
       maxTurns: 6,
       /** The effort the stage asks for. The ceiling of the run may lower it, never raise it. */
-      effort: 'medium',
+      effort: 'high',
     },
     crop: {
       enabled: true,
       /** local: the harness cuts the fragments the segmentation names. ai: the cropper picks them. */
       mode: 'local',
       /** Max agent turns the cropper may spend in the ai mode. */
-      maxTurns: 6,
+      maxTurns: 12,
       /** Cap of the fragments one run cuts; 0 lifts the cap. */
       maxCrops: 192,
       /** The effort the stage asks for. */
@@ -211,14 +211,14 @@ export const defaults = {
       /** Max agent turns the measurer may spend. */
       maxTurns: 8,
       /** The effort the stage asks for: the geometry is a style decision, so it asks for a lot. */
-      effort: 'xhigh',
+      effort: 'high',
     },
     recognize: {
       enabled: true,
       /** Max agent turns the recognizer may spend. */
-      maxTurns: 8,
+      maxTurns: 12,
       /** The effort the stage asks for: the typography is a style decision, so it asks for a lot. */
-      effort: 'xhigh',
+      effort: 'high',
     },
     sample: {
       enabled: true,
@@ -227,18 +227,18 @@ export const defaults = {
       /** The effort of the local mode: the colours are read by the harness, the model only names them. */
       localEffort: 'low',
       /** The effort of the ai mode: the model reads the pixels itself and has to be sharp. */
-      aiEffort: 'xhigh',
+      aiEffort: 'high',
       /** Max agent turns the sampler may spend. */
-      maxTurns: 4,
+      maxTurns: 8,
     },
     resolve: {
       enabled: true,
       /** local: the harness merges the parts. ai: the resolver reconciles them. */
       mode: 'local',
       /** Max agent turns the resolver may spend in the ai mode. */
-      maxTurns: 4,
+      maxTurns: 8,
       /** The effort the stage asks for in the ai mode. */
-      effort: 'medium',
+      effort: 'high',
       /** Write DESIGN.md next to the measurements. */
       designMd: true,
       /** Write a CSS token file next to the measurements. */

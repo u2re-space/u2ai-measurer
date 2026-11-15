@@ -39,7 +39,7 @@ test('the stages that may work in two ways name their mode', () => {
     }
     assert.equal(defaults.stages.sample.mode, 'local');
     assert.equal(defaults.stages.sample.localEffort, 'low');
-    assert.equal(defaults.stages.sample.aiEffort, 'xhigh');
+    assert.equal(defaults.stages.sample.aiEffort, 'high');
 });
 
 test('the default config passes the validation', () => {
