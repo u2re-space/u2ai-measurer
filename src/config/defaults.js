@@ -211,14 +211,14 @@ export const defaults = {
       /** Max agent turns the measurer may spend. */
       maxTurns: 8,
       /** The effort the stage asks for: the geometry is a style decision, so it asks for a lot. */
-      effort: 'high',
+      effort: 'medium',
     },
     recognize: {
       enabled: true,
       /** Max agent turns the recognizer may spend. */
       maxTurns: 12,
       /** The effort the stage asks for: the typography is a style decision, so it asks for a lot. */
-      effort: 'high',
+      effort: 'medium',
     },
     sample: {
       enabled: true,
