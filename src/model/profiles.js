@@ -42,8 +42,8 @@ export const MODEL_PROFILES = Object.freeze({
 const DEFAULT_PROFILE = Object.freeze({
     window: 131_072,
     maxOutput: 16_384,
-    ceiling: 'medium',
-    efforts: ['low', 'medium', 'high'],
+    ceiling: 'xhigh',
+    efforts: ['low', 'medium', 'high', 'xhigh'],
 });
 
 /**

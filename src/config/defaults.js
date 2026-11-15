@@ -27,7 +27,7 @@ export const defaults = {
   maxOutputTokens: null,
   /** Per-model ceilings: { "<model>": { window, maxOutput, ceiling } }. */
   models: {},
-  reasoning: { effort: 'medium', summary: 'auto', mode: null },
+  reasoning: { effort: 'high', summary: 'auto', mode: null },
   retries: 3,
   /**
    * The idle timeout of a request, in milliseconds.
@@ -200,7 +200,7 @@ export const defaults = {
       /** Max agent turns the segmentator may spend. */
       maxTurns: 6,
       /** The effort the stage asks for. The ceiling of the run may lower it, never raise it. */
-      effort: 'high',
+      effort: 'max',
     },
     crop: {
       enabled: true,
@@ -211,21 +211,21 @@ export const defaults = {
       /** Cap of the fragments one run cuts; 0 lifts the cap. */
       maxCrops: 192,
       /** The effort the stage asks for. */
-      effort: 'medium',
+      effort: 'high',
     },
     measure: {
       enabled: true,
       /** Max agent turns the measurer may spend. */
       maxTurns: 8,
       /** The effort the stage asks for: the geometry is a style decision, so it asks for a lot. */
-      effort: 'medium',
+      effort: 'high',
     },
     recognize: {
       enabled: true,
       /** Max agent turns the recognizer may spend. */
       maxTurns: 12,
       /** The effort the stage asks for: the typography is a style decision, so it asks for a lot. */
-      effort: 'medium',
+      effort: 'high',
     },
     sample: {
       enabled: true,

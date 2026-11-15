@@ -102,6 +102,9 @@ Every stage asks for the reasoning effort it needs (`stages.<id>.effort`), and t
 ceiling (`--effort`). The answer is the lower of the two: the ceiling lowers the effort of a
 stage, it never raises it. The ceiling of the role (`roles.<role>.maxEffort`) lowers it too.
 
+The two stages that do not trust the Gemini work on `medium` in any case — see
+[the stages that do not trust the Gemini](#the-stages-that-do-not-trust-the-gemini).
+
 Two stages work in two ways, and the local way costs nothing:
 
 | Stage | `local` | `ai` |
@@ -310,6 +313,26 @@ cost the same seconds, and `medium` is its ceiling.
 
 ```bash
 ai-measure measure landing.png --model moonshotai/kimi-k3.1-pro --effort none
+```
+
+### The stages that do not trust the Gemini
+
+Two stages cut the picture apart, and they are not trusted to the Gemini 4 Hydrogen: the
+`segmentate` stage (the zones of the reference) and the `crop` stage in its `ai` mode (the
+fragments worth cutting out). They want a sharp eye and a quick answer, not a long thinking, so
+they go to the Kimi K3.1 Pro with the reasoning at `medium` — the Kimi has no levels above
+`medium` anyway, the answer of the same question costs the same seconds there.
+
+The rule moves the model of the stage, not the model of the run: the rest of the pipeline still
+answers on the Gemini. A role that names its own model in the configuration
+(`roles.segmentator.model`) is never moved — the user's word wins:
+
+```json
+{
+  "roles": {
+    "segmentator": { "model": "google/gemini-4-hydrogen" }
+  }
+}
 ```
 
 ## Outputs

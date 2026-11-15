@@ -14,7 +14,7 @@
  * schema tool, not as prose. And the answer may come in a second phase: a model that is fond of
  * tools explores the picture and answers afterwards, under a schema the API holds it to.
  *
- * @depends openai/responses, openai/fallback, model/profiles, agent/documentation
+ * @depends openai/responses, openai/fallback, model/profiles, model/trust, agent/documentation
  * @usedBy shared/pipeline, stages
  * @exports ROLE_INSTRUCTIONS, resolveRoleInstructions, resolveRole, createRoleRunner, roleContext
  * @ai.tags roles
@@ -32,6 +32,7 @@ import { instructions as designerInstructions } from './designer.js';
 import { parseResponse, textPart } from '../openai/responses.js';
 import { withModelFallback } from '../openai/fallback.js';
 import { getModelProfile, snapEffort, capEffort } from '../model/profiles.js';
+import { SAFE_MODEL, SAFE_EFFORT, isTrusted } from '../model/trust.js';
 import { documentationFor } from '../agent/documentation.js';
 
 /**
@@ -100,6 +101,9 @@ export function roleContext(config, name) {
  *
  * The chain is role → `roles.default` → the top level of the config. The effort is clamped to
  * what the model accepts and to the ceiling of the role.
+ *
+ * A model that is not trusted with the role does not answer it: the role moves to the safe
+ * model of the house (`model/trust`). The pin of the role in the config is never moved.
  * @param {object} config
  * @param {string} name
  * @param {{ model?: string|null, effort?: string|null, ceiling?: string|null }} [overrides]
@@ -121,13 +125,29 @@ export function resolveRole(config, name, { model = null, effort = null, ceiling
         return null;
     };
 
-    const resolvedModel = model ?? pick('model') ?? textOf(config?.model) ?? null;
+    // The model of the role: the pin of the run wins, then the pin of the role, then the pin of
+    // the default role, then the model of the configuration.
+    const runModel = model ? String(model) : null;
+    const roleModel = role?.model ? String(role.model) : null;
+    const wantedModel = runModel
+        ?? roleModel
+        ?? (fallback?.model ? String(fallback.model) : null)
+        ?? textOf(config?.model)
+        ?? null;
+    // The trust rule: a model that is not trusted with the role does not answer it — the role
+    // goes to the safe model of the house. The pin of the role itself is never moved: the user
+    // named that model for that role on purpose.
+    const moved = !(roleModel && !runModel) && !isTrusted(name, wantedModel);
+    const resolvedModel = moved ? SAFE_MODEL : wantedModel;
     const profile = getModelProfile(resolvedModel, config);
 
     // The effort of the role in the config wins over the one of the stage: the role is the
     // narrower name of the same worker.
     const wantedEffort = pick('effort') ?? effort ?? textOf(config?.reasoning?.effort) ?? null;
-    let resolvedEffort = snapEffort(wantedEffort, profile);
+    // A role that moved to the safe model works on `medium`: the levels above it cost the same
+    // seconds anyway, and the stage asked for them of a model that was not trusted.
+    const movedEffort = moved && !role?.effort ? SAFE_EFFORT : wantedEffort;
+    let resolvedEffort = snapEffort(movedEffort, profile);
     // Two ceilings: the one of the role and the one of the run. The lower of them wins.
     for (const cap of [pick('maxEffort'), ceiling]) {
         if (!cap || !resolvedEffort) continue;
