@@ -64,12 +64,11 @@ export const defaults = {
     models: {
       'google/gemini-4-hydrogen': [
         'moonshotai/kimi-k3.1-pro',
-        'moonshotai/kimi-k3',
-        'openai/gpt-5.1',
-        'anthropic/claude-sonnet-5',
+        'openai/gpt-6.1-terra',
+        'anthropic/claude-sonnet-5.5',
       ],
-      'moonshotai/kimi-k3.1-pro': ['moonshotai/kimi-k3', 'openai/gpt-5.1', 'anthropic/claude-sonnet-5'],
-      '*': ['moonshotai/kimi-k3.1-pro', 'moonshotai/kimi-k3', 'openai/gpt-5.1'],
+      'moonshotai/kimi-k3.1-pro': ['openai/gpt-6.1-terra', 'anthropic/claude-sonnet-5.5'],
+      '*': ['moonshotai/kimi-k3.1-pro', 'openai/gpt-6.1-terra'],
     },
   },
 

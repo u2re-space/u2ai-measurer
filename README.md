@@ -300,14 +300,14 @@ the live answers of it:
 
 | Model | Context | Output | Ceiling | Ladder |
 |---|---|---|---|---|
-| `google/gemini-4-hydrogen` | 1M tokens (4 MiB) | 1M | `xhigh` | `low`, `medium`, `high`, `xhigh` |
+| `google/gemini-4-hydrogen` | 1M tokens (4 MiB) | 64K | `xhigh` | `low`, `medium`, `high`, `xhigh` |
 | `minimax/minimax-m3.1-flash` | 1M tokens (4 MiB) | 524K | `xhigh` | `low`, `medium`, `high`, `xhigh` |
 | `moonshotai/kimi-k3.1-pro` | 1M tokens (4 MiB) | 944K | `medium` | `none`, `low`, `medium` |
+| `openai/gpt-6-luna` | 272K tokens | 128K | `xhigh` | `low`, `medium`, `high`, `xhigh` |
 
-The Gemini is the model of the run: it decodes up to 1M tokens with the continuation and takes
-the effort up to `xhigh`. The card of the vendor names the four levels of its effort and has no
-`none`, so the reasoning off is raised to `low`. MiniMax refuses to work without reasoning, so
-`none` is raised to `low` there too. The Kimi takes the reasoning off without a refusal and
+GPT-6 Luna is the default model of the run. The Gemini card names the four levels of its effort
+and has no `none`, so the reasoning off is raised to `low`. MiniMax refuses to work without
+reasoning, so `none` is raised to `low` there too. The Kimi takes the reasoning off without a refusal and
 answers in a fraction of the time, so `none` stays on its ladder — the levels above `medium`
 cost the same seconds, and `medium` is its ceiling.
 
@@ -324,7 +324,7 @@ they go to the Kimi K3.1 Pro with the reasoning at `medium` — the Kimi has no 
 `medium` anyway, the answer of the same question costs the same seconds there.
 
 The rule moves the model of the stage, not the model of the run: the rest of the pipeline still
-answers on the Gemini. A role that names its own model in the configuration
+answers on the run's selected model. A role that names its own model in the configuration
 (`roles.segmentator.model`) is never moved — the user's word wins:
 
 ```json
@@ -523,7 +523,7 @@ The starter file:
 
 ```json
 {
-  "model": "google/gemini-4-hydrogen",
+  "model": "openai/gpt-6-luna",
   "reasoning": { "effort": "high", "summary": "auto" },
   "backends": [
     { "baseURL": "https://routerai.ru/api/v1", "env": "ROUTERAI_API_KEY" }

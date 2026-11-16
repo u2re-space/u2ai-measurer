@@ -21,22 +21,22 @@ import { ENUMS } from '../config/constants.js';
  *   - MiniMax M3.1 Flash — 1M tokens of context (4 MiB of text) and 524K of output. The
  *     endpoint refuses to work without reasoning ("Reasoning is mandatory for this endpoint
  *     and cannot be disabled"), so `none` is not on its ladder.
- *   - Gemini 4 Hydrogen — 1M tokens of context (4 MiB of text) and up to 1M of output with the
- *     continuation. The card of the vendor names the four levels of the effort (`low`, `medium`,
+ *   - Gemini 4 Hydrogen — 1M tokens of context (4 MiB of text) and 64K of output. The card
+ *     of the vendor names the four levels of the effort (`low`, `medium`,
  *     `high`, `xhigh`); there is no `none`, so the reasoning off is raised to `low`.
  *   - Kimi K3.1 Pro — 1M tokens of context (4 MiB of text) and 944K of output. It takes the
  *     reasoning off without a refusal and answers in a fraction of the time, so `none` stays on
  *     its ladder; the ceiling is `medium`, because the levels above it cost the same seconds.
  */
 export const MODEL_PROFILES = Object.freeze({
-    'minimax/minimax-m3.1-flash': { window: 4_194_304, maxOutput: 524_288, ceiling: 'xhigh', efforts: ['low', 'medium', 'high', 'xhigh'] },
-    'google/gemini-4-hydrogen': { window: 4_194_304, maxOutput: 655_36, ceiling: 'xhigh', efforts: ['low', 'medium', 'high', 'xhigh'] },
-    'moonshotai/kimi-k3.1-pro': { window: 4_194_304, maxOutput: 944_000, ceiling: 'high', efforts: ['none', 'low', 'medium', 'high'] },
-    'openai/gpt-6.1-sol': { window: 4_194_304, maxOutput: 32_768, ceiling: 'xhigh', efforts: ['low', 'medium', 'high', 'xhigh'] },
-    'openai/gpt-6.1-terra': { window: 2_097_152, maxOutput: 16_384, ceiling: 'high', efforts: ['low', 'medium', 'high'] },
-    'openai/gpt-6-luna': { window: 272_000, maxOutput: 128_000, ceiling: 'xhigh', efforts: ['low', 'medium', 'high', 'xhigh'] },
+    'minimax/minimax-m3.1-flash': { window: 1000 * 1000 * 4, maxOutput: 512 * 1024, ceiling: 'xhigh', efforts: ['low', 'medium', 'high', 'xhigh'] },
+    'google/gemini-4-hydrogen': { window: 1024 * 1024 * 4, maxOutput: 64 * 1024, ceiling: 'xhigh', efforts: ['low', 'medium', 'high', 'xhigh'] },
+    'moonshotai/kimi-k3.1-pro': { window: 1024 * 1024 * 4, maxOutput: 1024 * 1024, ceiling: 'high', efforts: ['none', 'low', 'medium', 'high'] },
+    'openai/gpt-6.1-sol': { window: 272 * 1024 * 4, maxOutput: 128 * 1024, ceiling: 'xhigh', efforts: ['low', 'medium', 'high', 'xhigh'] },
+    'openai/gpt-6.1-terra': { window: 272 * 1024 * 4, maxOutput: 128 * 1024, ceiling: 'high', efforts: ['low', 'medium', 'high'] },
+    'openai/gpt-6-luna': { window: 272 * 1024 * 4, maxOutput: 128 * 1024, ceiling: 'xhigh', efforts: ['low', 'medium', 'high', 'xhigh'] },
+           'gpt-6-luna': { window: 272 * 1024 * 4, maxOutput: 128 * 1024, ceiling: 'xhigh', efforts: ['low', 'medium', 'high', 'xhigh'] },
     'openai/gpt-image-2.6-sunburst': { window: 0, maxOutput: 0, ceiling: null, efforts: [] },
-    'gpt-6-luna': { window: 272_000, maxOutput: 128_000, ceiling: 'xhigh', efforts: ['low', 'medium', 'high', 'xhigh'] }
 });
 
 /** The profile of a model that is not in the table. */

@@ -13,18 +13,22 @@ import { MODEL_PROFILES, getModelProfile, snapEffort } from '../src/model/profil
 test('the profile of a model of the house is tuned by the cards of the gateway', () => {
     const gemini = MODEL_PROFILES['google/gemini-4-hydrogen'];
     assert.equal(gemini.window, 4_194_304, '1M tokens of context');
-    assert.equal(gemini.maxOutput, 65536, 'the continuation decodes up to 1M tokens');
+    assert.equal(gemini.maxOutput, 65_536, '64K output tokens');
     assert.equal(gemini.ceiling, 'xhigh');
     assert.deepEqual(gemini.efforts, ['low', 'medium', 'high', 'xhigh']);
 
     const minimax = MODEL_PROFILES['minimax/minimax-m3.1-flash'];
-    assert.equal(minimax.window, 4_194_304, '1M tokens of context');
+    assert.equal(minimax.window, 4_000_000, '1M tokens of context');
     assert.equal(minimax.maxOutput, 524_288);
 
     const kimi = MODEL_PROFILES['moonshotai/kimi-k3.1-pro'];
     assert.equal(kimi.window, 4_194_304, '1M tokens of context');
-    assert.equal(kimi.maxOutput, 944_000);
+    assert.equal(kimi.maxOutput, 1048576);
     assert.equal(kimi.ceiling, 'high', 'the levels above it cost the same seconds');
+
+    const luna = MODEL_PROFILES['openai/gpt-6-luna'];
+    assert.equal(luna.window, 272 * 1024 * 4, '272K tokens of context');
+    assert.equal(luna.maxOutput, 128 * 1024, '128K output tokens');
 });
 
 test('the effort is pulled down to the ladder of the model', () => {

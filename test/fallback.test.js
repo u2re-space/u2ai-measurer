@@ -18,15 +18,14 @@ test('the chain of the house starts with the Kimi', () => {
         [
             'google/gemini-4-hydrogen',
             'moonshotai/kimi-k3.1-pro',
-            'moonshotai/kimi-k3',
-            'openai/gpt-5.1',
-            'anthropic/claude-sonnet-5',
+            'openai/gpt-6.1-terra',
+            'anthropic/claude-sonnet-5.5',
         ],
     );
     // Every other model falls back to the Kimi too.
     assert.deepEqual(
         fallbackChain(defaults, 'vendor/other'),
-        ['vendor/other', 'moonshotai/kimi-k3.1-pro', 'moonshotai/kimi-k3', 'openai/gpt-5.1'],
+        ['vendor/other', 'moonshotai/kimi-k3.1-pro', 'openai/gpt-6.1-terra'],
     );
 });
 
