@@ -184,6 +184,45 @@ test('the write_file tool refuses a path outside the opened directory', async ()
     }
 });
 
+test('a file name without a folder lands in the scratch of the run', async () => {
+    const { root, cleanup } = await workspace();
+    try {
+        const scratch = path.join(root, '.ai', 'tmp', 'w1', 'scratch');
+        const toolset = createToolset({
+            root,
+            config: { tools: {} },
+            writeDirs: [path.join(root, 'out')],
+            scratch,
+        });
+        const answer = await toolset.execute('write_file', { path: 'note.txt', content: 'hello' });
+        assert.match(answer, /scratch/);
+        assert.equal(await readFile(path.join(scratch, 'note.txt'), 'utf-8'), 'hello');
+        // The root of the project is not the model's.
+        assert.equal(await stat(path.join(root, 'note.txt')).then(() => true).catch(() => false), false);
+    } finally {
+        await cleanup();
+    }
+});
+
+test('the crop_image tool without an output writes into the scratch of the run', async () => {
+    const { root, cleanup } = await workspace();
+    try {
+        const scratch = path.join(root, '.ai', 'tmp', 'w1', 'scratch');
+        const toolset = createToolset({
+            root,
+            config: { tools: {} },
+            writeDirs: [path.join(root, 'out')],
+            scratch,
+        });
+        const answer = await toolset.execute('crop_image', { path: 'picture.png', x: 0, y: 0, width: 20, height: 10 });
+        assert.match(answer, /scratch/);
+        assert.ok(await stat(path.join(scratch, 'picture-crop.png')).then((info) => info.isFile()));
+        assert.equal(await stat(path.join(root, 'picture-crop.png')).then(() => true).catch(() => false), false);
+    } finally {
+        await cleanup();
+    }
+});
+
 test('the crop_image tool cuts a rectangle out of a picture', async () => {
     const { root, cleanup } = await workspace();
     try {

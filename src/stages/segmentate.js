@@ -18,7 +18,7 @@
  * @ai.hint io
  */
 
-import { SEGMENTATION_SCHEMA } from '../agent/schemas.js';
+import { SEGMENTATION_SCHEMA, schemaProblemsText } from '../agent/schemas.js';
 import { attachReference, attachmentBlock, pictureBlock, splitReferences } from './references.js';
 import { scaleBox, writeStageFile } from './artifacts.js';
 
@@ -90,6 +90,15 @@ export async function runSegmentStage({
         if (!data) {
             warnings.push(`The segmentator did not return a segmentation of ${item.rel}.`);
             continue;
+        }
+        // An answer that does not follow the schema is a warning, not a silent empty sheet.
+        //
+        // A backend that drops the format rule lets the model answer in its own words: the
+        // field that says which zone is worth cutting is called something else, and every zone
+        // looks like a zone that is not worth cutting. The reader has to be told.
+        const issues = schemaProblemsText(answer.schemaProblems);
+        if (issues) {
+            warnings.push(`The segmentation of ${item.rel} does not follow the schema: ${issues}.`);
         }
         const zones = [];
         for (const zone of Array.isArray(data.zones) ? data.zones : []) {

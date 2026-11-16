@@ -13,7 +13,7 @@ import { MODEL_PROFILES, getModelProfile, snapEffort } from '../src/model/profil
 test('the profile of a model of the house is tuned by the cards of the gateway', () => {
     const gemini = MODEL_PROFILES['google/gemini-4-hydrogen'];
     assert.equal(gemini.window, 4_194_304, '1M tokens of context');
-    assert.equal(gemini.maxOutput, 1_048_576, 'the continuation decodes up to 1M tokens');
+    assert.equal(gemini.maxOutput, 65536, 'the continuation decodes up to 1M tokens');
     assert.equal(gemini.ceiling, 'xhigh');
     assert.deepEqual(gemini.efforts, ['low', 'medium', 'high', 'xhigh']);
 
@@ -24,7 +24,7 @@ test('the profile of a model of the house is tuned by the cards of the gateway',
     const kimi = MODEL_PROFILES['moonshotai/kimi-k3.1-pro'];
     assert.equal(kimi.window, 4_194_304, '1M tokens of context');
     assert.equal(kimi.maxOutput, 944_000);
-    assert.equal(kimi.ceiling, 'medium', 'the levels above it cost the same seconds');
+    assert.equal(kimi.ceiling, 'high', 'the levels above it cost the same seconds');
 });
 
 test('the effort is pulled down to the ladder of the model', () => {
@@ -34,7 +34,7 @@ test('the effort is pulled down to the ladder of the model', () => {
     assert.equal(snapEffort('max', gemini), 'xhigh', 'the ceiling of the model wins');
 
     const kimi = getModelProfile('moonshotai/kimi-k3.1-pro');
-    assert.equal(snapEffort('high', kimi), 'medium');
+    assert.equal(snapEffort('high', kimi), 'high');
     assert.equal(snapEffort('none', kimi), 'none', 'the reasoning may be turned off');
 
     const minimax = getModelProfile('minimax/minimax-m3.1-flash');

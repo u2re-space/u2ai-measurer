@@ -10,7 +10,7 @@
  *
  * @exports MEASUREMENT_SCHEMA, DESIGN_SCHEMA, CROP_PLAN_SCHEMA, SEGMENTATION_SCHEMA,
  *          GEOMETRY_SCHEMA, RECOGNITION_SCHEMA, PALETTE_SCHEMA, strictSchema,
- *          SUB_REFERENCE_KINDS
+ *          strictnessProblems, schemaProblems, schemaProblemsText, SUB_REFERENCE_KINDS
  * @ai.tags schema, roles
  * @ai.hint pure
  * @ai.hint legacy-0.2
@@ -529,4 +529,91 @@ export function strictnessProblems(schema) {
     };
     walk(schema, '$');
     return problems;
+}
+
+/**
+ * Check an answer against the schema it was asked for.
+ *
+ * The API holds a model to a schema only when the backend really applies the format rule. A
+ * gateway that drops it lets the model answer in its own words: the field the harness reads
+ * is called something else, and the answer looks fine to everybody but the harness. The
+ * harness has to see that itself — a silent answer that fits nothing is no answer at all.
+ *
+ * @param {unknown} data the answer of the model
+ * @param {object} schema the schema the answer should follow
+ * @returns {string[]} the problems; empty when the answer follows the schema
+ * @exports
+ * @ai.hint pure
+ */
+export function schemaProblems(data, schema) {
+    const problems = [];
+    const walk = (value, node, where) => {
+        if (!node || typeof node !== 'object') return;
+        const types = Array.isArray(node.type) ? node.type : (node.type ? [node.type] : []);
+        // A null is a value of its own in these schemas: "not measured" is an answer.
+        if (types.includes('null') && value === null) return;
+        if (types.includes('object')) {
+            if (!value || typeof value !== 'object' || Array.isArray(value)) {
+                problems.push(`${where}: an object was expected`);
+                return;
+            }
+            const properties = node.properties ?? {};
+            for (const key of node.required ?? []) {
+                if (!(key in value)) problems.push(`${where}.${key}: the field is missing`);
+            }
+            for (const key of Object.keys(value)) {
+                if (!Object.hasOwn(properties, key)) problems.push(`${where}.${key}: the field is not in the schema`);
+            }
+            for (const [key, sub] of Object.entries(properties)) {
+                if (key in value) walk(value[key], sub, `${where}.${key}`);
+            }
+            return;
+        }
+        if (types.includes('array')) {
+            if (!Array.isArray(value)) {
+                problems.push(`${where}: an array was expected`);
+                return;
+            }
+            value.forEach((item, index) => walk(item, node.items, `${where}[${index}]`));
+            return;
+        }
+        if (types.includes('string')) {
+            if (typeof value !== 'string') {
+                problems.push(`${where}: a string was expected`);
+                return;
+            }
+            if (Array.isArray(node.enum) && !node.enum.includes(value)) {
+                problems.push(`${where}: "${value}" is not one of ${node.enum.join(', ')}`);
+            }
+            return;
+        }
+        if (types.includes('number')) {
+            if (typeof value !== 'number' || !Number.isFinite(value)) problems.push(`${where}: a number was expected`);
+            return;
+        }
+        if (types.includes('boolean') && typeof value !== 'boolean') {
+            problems.push(`${where}: a boolean was expected`);
+        }
+    };
+    walk(data, schema, '$');
+    return problems;
+}
+
+/**
+ * The problems of an answer as one line, for a warning a person reads.
+ *
+ * The list of the problems may be long — one line per field of every zone — and the warning
+ * has to stay readable: the first few problems are named, the rest are counted.
+ * @param {string[]} problems the problems of the answer
+ * @param {number} [limit] how many problems are named
+ * @returns {string} the line; empty when there are no problems
+ * @exports
+ * @ai.hint pure
+ */
+export function schemaProblemsText(problems, limit = 6) {
+    const list = (Array.isArray(problems) ? problems : []).filter(Boolean);
+    if (!list.length) return '';
+    const shown = list.slice(0, Math.max(1, limit));
+    const rest = list.length - shown.length;
+    return `${shown.join('; ')}${rest > 0 ? `; and ${rest} more` : ''}`;
 }

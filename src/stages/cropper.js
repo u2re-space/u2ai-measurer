@@ -24,7 +24,7 @@ import path from 'node:path';
 import { mkdir, readdir, rm, stat } from 'node:fs/promises';
 import { rasterCrop, rasterInfo } from '../image/sharp.js';
 import { clampRect, sameFragment } from '../image/crop.js';
-import { CROP_PLAN_SCHEMA } from '../agent/schemas.js';
+import { CROP_PLAN_SCHEMA, schemaProblemsText } from '../agent/schemas.js';
 import { attachReference, attachmentBlock, pictureBlock, splitReferences } from './references.js';
 import { CROPS_DIR, cropRelPath, cropSlug, readStageFile, scaleBox, writeStageFile } from './artifacts.js';
 
@@ -105,7 +105,9 @@ export async function runCropStage({
         else warnings.push('The cropper named no fragment: the fragments of the segmentation are cut.');
     }
     if (!plan.length) {
-        return { crops: [], file: null, warnings };
+        // An empty plan is a fact the reader needs, not a silent nothing: the folder of the
+        // fragments is there and it is empty, and the file of the stage says so.
+        warnings.push('No fragment was cut: the segmentation names no zone as an asset or a detail.');
     }
 
     // The files the fragments are cut from: the references of the run.
@@ -262,6 +264,10 @@ async function askCropper({ root, workId, config, runner, references, segmentati
         if (answer.error) {
             warnings.push(`The cropper failed on ${item.rel}: ${answer.error}`);
             continue;
+        }
+        const issues = schemaProblemsText(answer.schemaProblems);
+        if (issues) {
+            warnings.push(`The crop plan of ${item.rel} does not follow the schema: ${issues}.`);
         }
         for (const crop of Array.isArray(answer.data?.crops) ? answer.data.crops : []) {
             const box = scaleBox(crop?.box, image.scale);

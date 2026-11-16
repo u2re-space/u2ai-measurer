@@ -8,7 +8,15 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { ROLE_INSTRUCTIONS, createRoleRunner, resolveRole, resolveRoleInstructions, roleContext } from '../src/roles/index.js';
-import { CROP_PLAN_SCHEMA, DESIGN_SCHEMA, MEASUREMENT_SCHEMA, strictnessProblems } from '../src/agent/schemas.js';
+import {
+    CROP_PLAN_SCHEMA,
+    DESIGN_SCHEMA,
+    MEASUREMENT_SCHEMA,
+    SEGMENTATION_SCHEMA,
+    schemaProblems,
+    schemaProblemsText,
+    strictnessProblems,
+} from '../src/agent/schemas.js';
 import { documentationFor, documentationNames } from '../src/agent/documentation.js';
 
 const configFor = (overrides = {}) => ({
@@ -44,7 +52,7 @@ test('the model of the run wins over the config', () => {
 test('the effort of the config is snapped to what the model accepts', () => {
     const config = configFor({ model: 'openai/gpt-6-luna', reasoning: { effort: 'xhigh' } });
     const role = resolveRole(config, 'measurer');
-    assert.ok(['low', 'medium'].includes(role.effort), `unexpected effort ${role.effort}`);
+    assert.ok(['low', 'medium', 'high', 'xhigh'].includes(role.effort), `unexpected effort ${role.effort}`);
 });
 
 test('the role of a role limits its effort', () => {
@@ -86,7 +94,7 @@ test('the two ceilings of a role are the lower of them', () => {
 test('the Kimi is the fast model and the ceiling of its effort is medium', () => {
     const config = configFor({ model: 'moonshotai/kimi-k3.1-pro', reasoning: { effort: 'high' } });
     // The levels above `medium` cost the same seconds: the ceiling of the model wins.
-    assert.equal(resolveRole(config, 'measurer').effort, 'medium');
+    assert.equal(resolveRole(config, 'measurer').effort, 'high');
     // The reasoning may be turned off: the request is not refused, it is only fast.
     const fast = configFor({ model: 'moonshotai/kimi-k3.1-pro', reasoning: { effort: 'none' } });
     assert.equal(resolveRole(fast, 'measurer').effort, 'none');
@@ -117,6 +125,29 @@ test('a schema that is not strict is reported', () => {
         required: ['a'],
     });
     assert.equal(problems.length, 2);
+});
+
+test('an answer that does not follow the schema is reported', () => {
+    // The answer the model gives when the backend drops the format rule: the field that says
+    // which zone is worth cutting is called something else.
+    const problems = schemaProblems({
+        summary: 'A page.',
+        zones: [{ name: 'hero', kind: 'image', mark: 'asset' }],
+    }, SEGMENTATION_SCHEMA);
+    assert.ok(problems.some((item) => /crop/.test(item)), 'the missing field is not named');
+    assert.ok(problems.some((item) => /mark/.test(item)), 'the extra field is not named');
+    // An answer that follows the schema has no problems.
+    assert.deepEqual(schemaProblems({ summary: 'ok' }, {
+        type: 'object',
+        properties: { summary: { type: 'string' } },
+        required: ['summary'],
+    }), []);
+});
+
+test('the problems of an answer are told as one line', () => {
+    assert.equal(schemaProblemsText([]), '');
+    assert.match(schemaProblemsText(['a: the field is missing', 'b: the field is missing']), /a: the field is missing/);
+    assert.match(schemaProblemsText(new Array(10).fill('x'), 3), /and 7 more/);
 });
 
 test('the runner reads the JSON answer of a role', async () => {
@@ -220,6 +251,72 @@ test('a role with tools looks first and answers afterwards', async () => {
     assert.equal(calls[2].tools, null);
     assert.equal(calls[2].schemaChannel, 'format');
     assert.deepEqual(answer.data, { summary: 'done' });
+});
+
+test('the answer phase carries the schema in the prompt as well', async () => {
+    const calls = [];
+    const client = {
+        responses: {
+            async create(params) {
+                calls.push(params);
+                if (calls.length === 1) {
+                    return {
+                        output: [{
+                            type: 'function_call',
+                            id: 'call-1',
+                            call_id: 'call-1',
+                            name: 'view_image',
+                            arguments: JSON.stringify({ path: 'picture.png' }),
+                        }],
+                        output_text: '',
+                    };
+                }
+                if (calls.length === 2) return { output_text: 'I measured a box of 10 by 10.', output: [] };
+                return { output_text: JSON.stringify({ summary: 'done' }), output: [] };
+            },
+        },
+    };
+    const toolset = {
+        specsFor: () => [{ type: 'function', name: 'view_image', parameters: { type: 'object' } }],
+        async execute() { return 'Image picture.png: 10×10 png'; },
+    };
+    const runner = createRoleRunner({ client, config: configFor(), toolset });
+    await runner.run('measurer', {
+        text: 'measure',
+        schema: MEASUREMENT_SCHEMA,
+        schemaName: 'measurement',
+        maxTurns: 3,
+    });
+    // A backend that does not apply the format rule still has to tell the model the names of
+    // the fields: the schema is in the prompt of the answer phase.
+    assert.match(calls[2].instructions, /property names/);
+    assert.ok(calls[2].instructions.includes('"rootFontSize"'), 'the schema is not in the prompt');
+    // The phase that looks carries no schema.
+    assert.equal(calls[0].instructions.includes('"rootFontSize"'), false);
+});
+
+test('an answer that does not follow the schema is reported to the stage', async () => {
+    const client = {
+        responses: {
+            async create() {
+                return {
+                    output_text: JSON.stringify({
+                        summary: 'A page.',
+                        zones: [{ name: 'hero', kind: 'image', mark: 'asset' }],
+                    }),
+                    output: [],
+                };
+            },
+        },
+    };
+    const runner = createRoleRunner({ client, config: configFor() });
+    const answer = await runner.run('segmentator', {
+        text: 'split',
+        schema: SEGMENTATION_SCHEMA,
+        schemaName: 'segmentation',
+    });
+    assert.ok(answer.schemaProblems.length > 0);
+    assert.match(answer.schemaProblems.join(' '), /crop/);
 });
 
 test('the schema travels as a tool when the mode says so', async () => {

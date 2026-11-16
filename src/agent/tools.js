@@ -253,10 +253,11 @@ export function mcpToolEntries(connections = []) {
  * already asked comes from the cache, and every call is written into the journal.
  * @param {{ root: string, config: object, role?: string|null, mcp?: object[],
  *   writeDirs?: string[], env?: object, packageRoot?: string, context?: object|null,
- *   map?: object|null, notify?: ((event: object) => void)|null }} opts
+ *   map?: object|null, scratch?: string|null,
+ *   notify?: ((event: object) => void)|null }} opts
  * @returns {{ execute: (name: string, args: object) => Promise<string>, specs: object[], setWriteDirs: Function, writeDirs: Function }}
  */
-export function createToolset({ root, config, role = null, mcp = [], writeDirs = null, env = process.env, packageRoot = PACKAGE_ROOT, context = null, map = null, notify = null }) {
+export function createToolset({ root, config, role = null, mcp = [], writeDirs = null, env = process.env, packageRoot = PACKAGE_ROOT, context = null, map = null, scratch = null, notify = null }) {
     const mcpTools = mcpToolEntries(mcp);
     const mcpSpecs = mcpTools.map((entry) => ({
         type: 'function',
@@ -266,6 +267,19 @@ export function createToolset({ root, config, role = null, mcp = [], writeDirs =
     }));
     const specs = [...buildSpecs(config?.tools, { role }), ...mcpSpecs];
     let allowed = (writeDirs ?? [root]).map((dir) => path.resolve(dir));
+    // The scratch of the run: the files the model makes for itself.
+    //
+    // A file name without a folder is not a file of the delivery — it is the model's own
+    // scratch work, and it dies with the run. The root of the project is not the model's, and
+    // a file that lands there is litter the reader has to clean up by hand.
+    const scratchDir = scratch ? path.resolve(scratch) : null;
+    const scratchRel = scratchDir ? toPosix(path.relative(path.resolve(root), scratchDir)) : '';
+
+    /**
+     * The directories the model may write into right now.
+     * @returns {string[]}
+     */
+    const openDirs = () => (scratchDir ? [...new Set([...allowed, scratchDir])] : allowed);
 
     /**
      * Resolve a path the model wants to read.
@@ -278,15 +292,26 @@ export function createToolset({ root, config, role = null, mcp = [], writeDirs =
 
     /**
      * Resolve a path the model wants to write, and refuse the ones outside the allowed dirs.
+     *
+     * The root of the project is not writable: a file the model names without a folder is
+     * its own scratch work, and it lands in the scratch of the run.
      * @param {string} value
      * @returns {Promise<{ abs: string, rel: string }>}
      */
     async function writePath(value) {
-        const located = await resolveInside(root, String(value ?? ''), { forWrite: true, allowRoot: false });
-        if (!allowed.some((dir) => isInside(dir, located.abs))) {
-            throw new Error(`Writing outside the output directory is forbidden: ${located.rel}`);
+        const requested = String(value ?? '').trim();
+        if (scratchDir && (requested === '' || requested === '.')) {
+            return { abs: scratchDir, rel: scratchRel };
         }
-        return located;
+        const located = await resolveInside(root, requested, { forWrite: true, allowRoot: false });
+        const bare = path.dirname(located.rel) === '.';
+        const target = bare && scratchDir
+            ? { abs: path.join(scratchDir, path.basename(located.rel)), rel: `${scratchRel}/${path.basename(located.rel)}` }
+            : located;
+        if (!openDirs().some((dir) => isInside(dir, target.abs))) {
+            throw new Error(`Writing outside the output directory is forbidden: ${target.rel}`);
+        }
+        return target;
     }
 
     /**
@@ -429,7 +454,10 @@ export function createToolset({ root, config, role = null, mcp = [], writeDirs =
                 const exists = await stat(located.abs).then((info) => info.isFile()).catch(() => false);
                 if (!exists) return missingAnswer(located.rel);
                 const parsed = path.parse(located.abs);
-                const fallback = path.join(parsed.dir, `${parsed.name}-crop.png`);
+                const fallbackName = `${parsed.name}-crop.png`;
+                const fallback = scratchDir
+                    ? path.join(scratchDir, fallbackName)
+                    : path.join(parsed.dir, fallbackName);
                 const target = await writePath(args.output ?? fallback);
                 const info = await rasterInfo(located.abs);
                 const box = clampRect(args, info);
@@ -441,7 +469,7 @@ export function createToolset({ root, config, role = null, mcp = [], writeDirs =
                 const located = await readPath(args.path);
                 const exists = await stat(located.abs).then((info) => info.isFile()).catch(() => false);
                 if (!exists) return missingAnswer(located.rel);
-                const outDir = await writePath(args.outputDir ?? '.');
+                const outDir = await writePath(args.outputDir ?? (scratchDir ?? '.'));
                 await mkdir(outDir.abs, { recursive: true });
                 const tiles = await rasterSplit({
                     input: located.abs,
@@ -647,7 +675,7 @@ export function createToolset({ root, config, role = null, mcp = [], writeDirs =
         },
         /** The directories the model may write into right now. */
         writeDirs() {
-            return [...allowed];
+            return [...openDirs()];
         },
     };
 }

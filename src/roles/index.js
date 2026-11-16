@@ -34,6 +34,7 @@ import { withModelFallback } from '../openai/fallback.js';
 import { getModelProfile, snapEffort, capEffort } from '../model/profiles.js';
 import { SAFE_MODEL, SAFE_EFFORT, isTrusted } from '../model/trust.js';
 import { documentationFor } from '../agent/documentation.js';
+import { schemaProblems } from '../agent/schemas.js';
 
 /**
  * Role instructions registry.
@@ -254,6 +255,14 @@ export function createRoleRunner({ client, config = {}, model = null, effort = n
         const userInput = userMessage(text, parts);
         let last = null;
 
+        // Does the answer follow the schema it was asked for?
+        //
+        // A backend that does not apply the format rule lets the model answer in its own
+        // words: the field the harness reads is called something else, and the sheet comes out
+        // empty without a word of complaint. The stage that waits for the answer has to know
+        // that the answer is not the one it asked for.
+        const checkAnswer = () => (schema && last?.data ? schemaProblems(last.data, schema) : []);
+
         // One attempt of the whole loop with one model. A model that fails takes the loop with
         // it: the next candidate starts from the first turn, with the picture again.
         const runOnce = async (usedModel) => {
@@ -330,12 +339,23 @@ export function createRoleRunner({ client, config = {}, model = null, effort = n
                 'Write the measurement sheet now, from the measurements you collected with the tools.',
                 'Do not call any tool. Leave a value null when you did not measure it.',
             ].join(' ');
+            // The schema travels in the prompt as well as in the format rule of the API.
+            //
+            // A gateway that does not apply `text.format` lets the model answer in its own
+            // words: the field the harness reads is called something else, and the sheet comes
+            // out empty without a word of complaint. The names of the fields are therefore in
+            // the prompt too, where every backend passes them on untouched.
+            const schemaNote = schema ? [
+                '',
+                'Answer with one JSON object that follows this schema exactly — the same property names, no others:',
+                JSON.stringify(schema),
+            ].join('\n') : '';
             const found = textOf(prose).trim()
                 ? `\n\nHere is what you have found so far:\n${textOf(prose).trim().slice(0, 8000)}`
                 : '';
             answer = await client.responses.create({
                 model: usedModel,
-                instructions: `${baseInstructions}\n\n${ask}`,
+                instructions: `${baseInstructions}\n\n${ask}${schemaNote}`,
                 input: [
                     ...userInput,
                     ...items,
@@ -376,7 +396,7 @@ export function createRoleRunner({ client, config = {}, model = null, effort = n
             return {
                 status: 'error', data: null, text: last?.text ?? '', toolCalls: last?.toolCalls ?? [],
                 usage: last?.usage ?? null, error: error?.message ?? String(error),
-                model: usedModel, trace,
+                model: usedModel, trace, schemaProblems: checkAnswer(),
             };
         }
 
@@ -396,6 +416,7 @@ export function createRoleRunner({ client, config = {}, model = null, effort = n
             error: last?.error?.message ?? null,
             model: last?.model ?? usedModel,
             trace,
+            schemaProblems: checkAnswer(),
         };
     }
 

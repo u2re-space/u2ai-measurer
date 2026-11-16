@@ -474,6 +474,40 @@
 - [x] README (EN) — раздел «The tools of the agent»: живой лог соседнего CLI
 - [x] Проверка: `npm test` — 238 тестов, все проходят; `npm run check` — 103 файла
 
+### step-c24 — Схема в промпте, и тишина больше не проходит
+
+- [x] Повод: после step-c21 измеритель «мало что выдавал»: стадия `crop` отрабатывала молча —
+      ни папки `crops/`, ни `crops.json`, ни предупреждения. Разбор живого прогона показал
+      причину: шлюз routerai не применяет `text.format.json_schema`, модель отвечает своей
+      формой (`mark` вместо `crop`), измеритель молча подставляет `crop: 'none'` — и план
+      обрезков пуст
+- [x] `src/roles/index.js` — схема ответа едет в промпт фазы ответа, а не только как правило
+      API: имена полей видны модели там, где `text.format` игнорируют
+- [x] `src/agent/schemas.js` — `schemaProblems` (ответ против схемы: чего не хватает и чего
+      лишнего) и `schemaProblemsText` (одна строка для предупреждения)
+- [x] `src/roles/index.js` — ответ проверяется против схемы, стадия получает `schemaProblems`
+- [x] `src/stages/segmentate.js` — предупреждение, когда ответ не по схеме
+- [x] `src/stages/cropper.js` — папка `crops/` и файл `crops.json` остаются всегда; пустой план
+      — предупреждение, а не молчание; план кропера тоже проверяется против схемы
+- [x] `src/agent/tools.js` — у прогона есть scratch (`.ai/tmp/<id>/scratch/`): имя файла без
+      папки уходит в scratch, корень проекта не пишется; `crop_image` без имени output — тоже
+      в scratch
+- [x] `src/shared/pipeline.js` — write dirs прогона: поставка + scratch
+- [x] `test/roles.test.js` — 4 теста: схема в промпте фазы ответа, ответ вне схемы, проверка
+      ответа, строка предупреждения
+- [x] `test/tools.test.js` — 2 теста: имя файла без папки и `crop_image` без output пишут в
+      scratch, а не в корень
+- [x] `test/stages.test.js` — 2 теста: стадия `crop` пишет каталог и файл при пустом плане,
+      стадия `segmentate` предупреждает об ответе вне схемы
+- [x] README (EN) — разделы «How a role answers», «The tools of the agent», «Outputs»
+- [ ] Отложено: `view_image` отдаёт только размер картинки — модель не видит свой обрезок и
+      режет детали вслепую; это отдельная правка
+- [x] Живая проверка: `ai-measure measure landing.png --stages segmentate,crop` — 22 зоны по
+      схеме (`crop`: asset 14, detail 2, none 6; поля `mark` нет), 16 фрагментов в
+      `measurements/crops/`, `crops.json` записан, корень проекта чист — свои обрезки модель
+      пишет в scratch прогона
+- [x] Проверка: `npm test` — 246 тестов, все проходят; `npm run check` — 103 файла
+
 ---
 
 ## 2. Правила работы

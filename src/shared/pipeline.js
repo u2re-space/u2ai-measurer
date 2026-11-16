@@ -249,7 +249,20 @@ export async function runPipeline({
 
     // One toolset for the whole run: the stages open the directories a role may write into, and
     // the role runner executes the calls with the very same executor.
-    const toolset = createToolset({ root, config, mcp, context, map, notify });
+    //
+    // The model writes into the delivery of the run and into the scratch of the run. The root
+    // of the project is not one of them: a file the model names without a folder is its own
+    // scratch work, and it dies with the run.
+    const toolset = createToolset({
+        root,
+        config,
+        mcp,
+        context,
+        map,
+        notify,
+        writeDirs: [outputDir],
+        scratch: path.join(workDir, 'scratch'),
+    });
 
     const roles = createRoleRunner({
         client,

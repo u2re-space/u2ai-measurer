@@ -351,11 +351,14 @@ The artifacts land in `output.dir` (default `./measurements`):
 | `report.md` | What was measured, how certain it is and which crops exist. |
 | `crops/` | The fragments themselves: `NN-element-header.png`, `NN-region-logo.png`. |
 
-The crops are cut into the work directory `.ai/tmp/<id>/crops/` and copied next to the artifacts,
-so the delivery is self-contained: the sheet, the report and the pictures travel together. The
-paths inside `measurements.json` and `report.md` count from the root of the project
-(`measurements/crops/01-bishop.png`), so they mean the same thing in the sheet, in the prompt and
-in the contract of the project.
+The crops are cut into the delivery itself — `measurements/crops/` — and the sheet, the report and
+the pictures travel together. The paths inside `measurements.json` and `report.md` count from the
+root of the project (`measurements/crops/01-bishop.png`), so they mean the same thing in the
+sheet, in the prompt and in the contract of the project.
+
+The crop stage always leaves its trace: the folder `measurements/crops/` and the file
+`measurements/stages/crops.json` are there after every run, even when nothing was cut. An empty
+plan is a fact the reader needs — it is told as a warning, not as a silence.
 
 ### What the measurer measures
 
@@ -687,12 +690,28 @@ looking and the writing apart.
 The picture is in the conversation of every turn of the first phase, and the notes of the
 reference stay in the message of the second phase.
 
+The schema of the second phase travels twice: as the format rule of the API and as the text of
+the prompt. A gateway that does not apply `text.format` lets the model answer in its own words —
+the field that says which zone is worth cutting is called something else — and the sheet comes out
+empty without a word of complaint. The names of the fields are therefore in the prompt too, where
+every backend passes them on untouched. And the harness checks the answer against the schema it
+asked for: an answer that does not fit is a warning, not a silent empty sheet.
+
+```
+The segmentation of landing.png does not follow the schema: $.zones[0].crop: the field is missing.
+```
+
 ### The tools of the agent
 
 `view_image`, `crop_image`, `split_image`, `sample_colors`, `parse_color`, `list_files`,
 `read_file`, `write_file`, `search_files`, `call_ai_image`, `call_ai_decompose` — plus the tools
 of the MCP servers. Every tool is bound to the working directory: a file may not be read outside
 it, and a file may only be written into the directories the stage opened.
+
+The model writes into the delivery of the run and into the scratch of the run
+(`.ai/tmp/<run-id>/scratch/`). The root of the project is not one of them: a file the model names
+without a folder is its own scratch work — it lands in the scratch of the run and dies with it —
+and a file it names with a folder has to belong to the delivery. The project stays clean.
 
 `sample_colors` reads the pixels; `parse_color` reads a colour out of a text — a hex, a
 `rgb()`, an `oklch()`, a named colour — and gives it back in every notation, with its luminance

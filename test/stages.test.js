@@ -508,6 +508,83 @@ test('the crop stage without a segmentation says so', async () => {
     }
 });
 
+test('the crop stage writes its file even when no fragment is cut', async () => {
+    const { root, cleanup } = await workspace();
+    try {
+        const outDir = path.join(root, 'measurements');
+        await writeStageFile(outDir, 'segmentation', {
+            generatedBy: 'ai-measure',
+            stage: 'segmentate',
+            sources: [{
+                source: 'picture.png',
+                canvas: { x: 0, y: 0, width: 100, height: 80 },
+                scale: 1,
+                zones: [{
+                    name: 'page', kind: 'background', box: { x: 0, y: 0, width: 100, height: 80 },
+                    role: 'page', use: '', crop: 'none', hasText: false, notes: '',
+                }],
+            }],
+        });
+        const result = await runCropStage({
+            root,
+            workId: 'w1',
+            config: cloneDefaults(),
+            runner: fakeRunner(null),
+            references: [{ kind: 'original', rel: 'picture.png' }],
+            outDir,
+        });
+        assert.equal(result.crops.length, 0);
+        // The folder of the fragments is there, and it is empty.
+        assert.ok(await stat(path.join(outDir, 'crops')).then((info) => info.isDirectory()));
+        // The file of the stage is there too, and it says that nothing was cut.
+        const written = JSON.parse(await readFile(path.join(outDir, 'stages', 'crops.json'), 'utf-8'));
+        assert.deepEqual(written.crops, []);
+        // And the reader is told: an empty plan is a fact, not a silence.
+        assert.match(result.warnings.join(' '), /no fragment/i);
+    } finally {
+        await cleanup();
+    }
+});
+
+test('the segmentation stage warns when the answer does not follow the schema', async () => {
+    const { root, cleanup } = await workspace();
+    try {
+        const runner = {
+            roles: [],
+            run: async () => ({
+                status: 'completed',
+                text: '',
+                toolCalls: [],
+                usage: null,
+                error: null,
+                data: {
+                    summary: 'A page.',
+                    source: 'picture.png',
+                    canvas: { x: 0, y: 0, width: 100, height: 80 },
+                    zones: [{
+                        name: 'hero', kind: 'image', box: { x: 0, y: 0, width: 10, height: 10 },
+                        role: 'hero', use: 'artwork', mark: 'asset', hasText: false, notes: '',
+                    }],
+                    notes: '',
+                },
+                schemaProblems: ['$.zones[0].crop: the field is missing', '$.zones[0].mark: the field is not in the schema'],
+            }),
+        };
+        const result = await runSegmentStage({
+            root,
+            workId: 'w1',
+            config: cloneDefaults(),
+            runner,
+            references: [{ kind: 'original', rel: 'picture.png' }],
+            outDir: path.join(root, 'measurements'),
+        });
+        assert.match(result.warnings.join(' '), /does not follow the schema/);
+        assert.match(result.warnings.join(' '), /crop/);
+    } finally {
+        await cleanup();
+    }
+});
+
 test('the sub-references come first and the originals they cover stay out of the context', () => {
     const { attached, context } = splitReferences([
         { kind: 'original', rel: 'shot.png' },
