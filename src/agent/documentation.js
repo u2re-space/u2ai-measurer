@@ -28,6 +28,8 @@ import { ENUMS } from '../config/constants.js';
 export const DOCUMENTATION = Object.freeze({
     cssUnits: `# CSS units
 
+<https://drafts.csswg.org/css-values-5/>
+
 Absolute: \`px\` (CSS pixels), \`in\`, \`cm\`, \`mm\`, \`q\`, \`pt\`, \`pc\`. 1in = 96px, 1pt = 1.333px.
 
 Font-relative: \`rem\` = the root font size (16px unless the reference proves another),
@@ -48,6 +50,8 @@ Rules for a measurement sheet:
 - state the assumed root size and every conversion in the notes.`,
 
     cssColors: `# CSS colours
+
+<https://drafts.csswg.org/css-color-5/>
 
 A colour in CSS is one of the notations below; they are the same colour, and a sheet may
 carry more than one of them when the reader has to check the value.
@@ -90,6 +94,8 @@ colour.`,
 
     cssDisplay: `# CSS display, position and layout
 
+<https://drafts.csswg.org/css-display/>
+
 \`display\` decides how a box takes part in the layout:
 - \`block\` — a box on its own line, the default of a div.
 - \`inline\` — a box in the text flow; width and height do not apply.
@@ -126,6 +132,8 @@ overlaps another box, and the box model in use — a coder cannot rebuild the la
 
     cssShapes: `# CSS shapes
 
+<https://drafts.csswg.org/css-shapes-2/>
+
 Border radius: \`border-radius: <radius>\` — one value for all corners, four values for
 top-left / top-right / bottom-right / bottom-left, or a shorthand with a slash: \`8px / 16px\`.
 
@@ -143,6 +151,8 @@ the straight edge; report it as px.`,
 
     cssTransform: `# CSS transforms
 
+<https://drafts.csswg.org/css-transforms-2/>
+
 \`transform: translate(x, y) rotate(deg) scale(x, y) skew(deg, deg)\` — the functions apply from
 right to left.
 
@@ -153,6 +163,8 @@ For a rotated element report: the rotation in degrees, the box of the element be
 rotation, and the placement of the pivot (usually the centre of the box).`,
 
     cssMotion: `# CSS motion
+
+<https://drafts.csswg.org/motion/>
 
 Transitions: \`transition: <property> <duration> <easing> <delay>\`; the default duration is 0s.
 Easings: \`linear\`, \`ease\`, \`ease-in\`, \`ease-out\`, \`ease-in-out\`, \`cubic-bezier(...)\`.
@@ -166,6 +178,8 @@ state to measure.`,
 
     cssContain: `# CSS containment and performance
 
+<https://drafts.csswg.org/css-contain/>
+
 \`contain: size | layout | style | paint\` — the sizes the element must not depend on outside itself.
 \`content-visibility: auto\` + \`contain-intrinsic-size\` skips the rendering of the off-screen parts.
 
@@ -173,6 +187,8 @@ They change the layout of a component, never the geometry of a reference picture
 geometry, not the optimisation.`,
 
     cssImages: `# CSS images
+
+<https://drafts.csswg.org/css-images-5/>
 
 \`object-fit: cover | contain | fill | none | scale-down\` with \`object-position\` — the image keeps
 its own proportions inside the box.
@@ -187,6 +203,8 @@ Measure the box of the image element, not the visible part of the picture inside
 
     cssMasking: `# CSS masking
 
+<https://drafts.csswg.org/css-masking/>
+
 \`mask-image\` takes a gradient or an SVG mask; \`mask-size\`, \`mask-position\`, \`mask-repeat\`
 and \`mask-composite\` control it. The webkit prefixes (\`-webkit-mask\`) are still needed for
 Safari.
@@ -195,6 +213,8 @@ A mask fades a picture out; it does not change its box. Measure the box and note
 visual property, not as a crop.`,
 
     cssFonts: `# CSS fonts
+
+<https://drafts.csswg.org/css-fonts/>
 
 \`font-family\` — a list of families with fallbacks. A family with spaces needs quotes.
 Generic families: \`serif\`, \`sans-serif\`, \`monospace\`, \`cursive\`, \`fantasy\`, \`system-ui\`,
@@ -210,6 +230,9 @@ confidence as low, and never present a likely family as certain.`,
 
     cssGrid: `# CSS grid
 
+- <https://drafts.csswg.org/css-display/>
+- <https://drafts.csswg.org/css-grid-3/>
+
 \`display: grid\` with \`grid-template-columns\` (\`repeat(3, 1fr)\`, \`minmax(240px, 1fr)\`,
 \`200px 1fr\`) and \`grid-template-rows\`. The gap is \`gap: <row> <column>\` (one value = both).
 Items are placed by \`grid-column\`, \`grid-row\`, \`grid-area\`, or automatically by the flow.
@@ -218,6 +241,9 @@ Measure the tracks: the column width, the row height, the gap between them and t
 (\`justify-items\`, \`align-items\`, \`justify-content\`, \`align-content\`).`,
 
     cssFlex: `# CSS flexbox
+
+- <https://drafts.csswg.org/css-display/>
+- <https://drafts.csswg.org/css-flexbox/>
 
 \`display: flex\` (\`inline-flex\` for an inline box). The main axis is the row by default, the
 cross axis is the column; \`flex-direction\` changes that.
@@ -230,6 +256,9 @@ Measure the gap, the size of the items and the alignment — these three are wha
 picture sees.`,
 
     wcagColors: `# WCAG colour rules
+
+- <https://drafts.csswg.org/css-color-5/>
+- <https://w3c.github.io/wcag/guidelines/22/>
 
 Contrast ratio: (L1 + 0.05) / (L2 + 0.05), where L is the relative luminance of the colour.
 1 = identical, 21 = black on white.
@@ -248,6 +277,8 @@ the white balance of a photo of a screen is unknown, and the sheet has to say so
 
     phosphorIcons: `# Phosphor icons
 
+<https://phosphoricons.com/>
+
 Phosphor (MIT): a family of 900+ icons in six weights (thin, light, regular, bold, fill, duotone)
 and four styles (regular, duotone, fill). The markup is a web font or an SVG sprite.
 
@@ -259,6 +290,8 @@ the stroke width in px, and name the icon only when the shape is unambiguous.`,
 
     lucideIcons: `# Lucide icons
 
+<https://lucide.dev/icons/>
+
 Lucide (ISC): a family of 1400+ icons, all drawn on a 24×24 grid with a 2px stroke, the round
 caps and the 2px corner radius.
 
@@ -269,6 +302,8 @@ The 24×24 grid is the reference: an icon of 16px has a stroke of about 1.33px, 
 a stroke of about 2.67px. Measure the stroke of the picture, then report the size that matches it.`,
 
     googleFonts: `# Google Fonts
+
+<https://fonts.google.com/>
 
 Google Fonts (SIL Open Font License): the catalogue of the open fonts — Roboto, Open Sans,
 Inter, Lora, Playfair Display, Montserrat, Source Sans 3, IBM Plex Sans, Merriweather, Poppins.
