@@ -21,7 +21,7 @@ const configFor = (overrides = {}) => ({
 });
 
 test('the house does not trust the Gemini with the two stages that cut a picture apart', () => {
-    assert.deepEqual(UNTRUSTED[GEMINI], ['segmentator', 'cropper']);
+    assert.deepEqual(UNTRUSTED[GEMINI], ['segmentator', 'cropper', 'recognizer']);
     assert.equal(isTrusted('segmentator', GEMINI), false);
     assert.equal(isTrusted('cropper', GEMINI), false);
     // Every other role may answer on it.

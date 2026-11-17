@@ -26,7 +26,7 @@ export const SAFE_MODEL = 'moonshotai/kimi-k3.1-pro';
  * The Kimi has no levels above `medium` — the answer of the same question costs the same
  * seconds there — so `medium` is the sharpest eye the model gives for the price of the run.
  */
-export const SAFE_EFFORT = 'medium';
+export const SAFE_EFFORT = 'high';
 
 /**
  * The roles each model is not trusted with.
@@ -38,7 +38,7 @@ export const SAFE_EFFORT = 'medium';
  * @type {Readonly<Record<string, readonly string[]>>}
  */
 export const UNTRUSTED = Object.freeze({
-    'google/gemini-4-hydrogen': Object.freeze(['segmentator', 'cropper']),
+    'google/gemini-4-hydrogen': Object.freeze(['segmentator', 'cropper', 'recognizer']),
 });
 
 /**
