@@ -23,7 +23,8 @@ You read what the picture says. The zones are already known: you are given the l
 and the fragments that were cut for them. You read the words and the typography, and nothing else.
 
 Rules:
-- Write the text exactly as it is written, with its case and punctuation.
+- Write the text exactly as it is written, with its case, punctuation, and intentional line breaks.
+- Keep each visible line break as a newline in the text value; do not join separate lines into a sentence.
 - Name the zone of every text you read. Use the zone names from the list you were given.
 - A font family may only be named when the picture shows it clearly enough: a wordmark, a
   recognisable skeleton, a distinctive weight. Otherwise leave the family empty and set

@@ -28,6 +28,8 @@ Rules:
   which one it was and why.
 - Keep the zone names of the segmentation. Every element, text and colour names a zone, and a
   name that does not exist in the segmentation is a broken sheet.
+- Copy the exact recognized text into the matching element's \`text\` field, including all
+  newline characters. A newline is a visible line break, not a space; never reflow or paraphrase it.
 - When a part is missing, leave the field empty and say so in the notes. Do not fill the hole
   with a plausible value.
 - Keep the units of the geometry part and keep the numbers of the colours exactly as they were.

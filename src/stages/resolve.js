@@ -238,6 +238,7 @@ export function buildSheet({ segmentation = null, geometry = null, recognition =
             elements.push({
                 name,
                 kind: String(zone?.kind ?? 'other'),
+                text: String(text?.text ?? ''),
                 box: zone?.box ?? null,
                 display: String(number?.display ?? ''),
                 rotation: Number.isFinite(number?.rotation) ? number.rotation : null,

@@ -127,7 +127,7 @@ const RECOGNITION = {
     summary: 'One caption.',
     texts: [{
         zone: 'caption',
-        text: 'Award of the year',
+        text: 'Award of the\nyear',
         role: 'caption',
         family: 'Inter',
         familyConfidence: 'medium',
@@ -955,6 +955,7 @@ test('the elements carry the numbers of the geometry and the texts of the recogn
         assert.equal(badge.confidence, 'high');
         assert.equal(caption.typography.family, 'Inter');
         assert.equal(caption.typography.fontSize, 14);
+        assert.equal(caption.text, 'Award of the\nyear');
         // The colour of the zone is attached to the zone it was read from.
         assert.equal(badge.colors[0].hex, '#1c1c1b');
         assert.equal(caption.colors.length, 0);
@@ -1183,6 +1184,7 @@ test('the sheet joins the zones, the numbers, the texts and the colours', () => 
     assert.equal(sheet.elements.length, 3);
     const badge = sheet.elements.find((item) => item.name === 'badge');
     assert.equal(badge.padding.top, 8);
+    assert.equal(badge.text, '');
     assert.equal(badge.colors[0].hex, '#1c1c1b');
     assert.equal(sheet.regions.length, 1);
     assert.equal(sheet.regions[0].crop, 'crops/01-asset-badge.png');

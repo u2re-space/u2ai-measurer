@@ -122,6 +122,7 @@ export const MEASUREMENT_SCHEMA = object({
         items: object({
             name: { ...string, description: 'Short element name the author can reuse.' },
             kind: measuredKind,
+            text: { ...string, description: 'The exact visible text in this element, including every intentional line break; empty when the element has no readable text.' },
             box,
             rotation: { ...nullableNumber, description: 'Turn clockwise from upright, in degrees. Null when straight or unreadable.' },
             borders: { ...string, description: 'Where the borders and edges fall and how thick they are; empty when none.' },
