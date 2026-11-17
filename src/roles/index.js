@@ -29,12 +29,52 @@ import { instructions as recognizerInstructions } from './recognizer.js';
 import { instructions as samplerInstructions } from './sampler.js';
 import { instructions as resolverInstructions } from './resolver.js';
 import { instructions as designerInstructions } from './designer.js';
-import { parseResponse, textPart } from '../openai/responses.js';
+import { parseResponse, textPart, imagePart } from '../openai/responses.js';
 import { withModelFallback } from '../openai/fallback.js';
 import { getModelProfile, snapEffort, capEffort } from '../model/profiles.js';
 import { SAFE_MODEL, SAFE_EFFORT, isTrusted } from '../model/trust.js';
 import { documentationFor } from '../agent/documentation.js';
 import { schemaProblems } from '../agent/schemas.js';
+import { resolveInside } from '../agent/paths.js';
+import { readFile } from 'node:fs/promises';
+
+/**
+ * The pictures that the answer of a tool names.
+ *
+ * A tool that makes a picture — `view_image` opens one, `crop_image` cuts one — answers with
+ * the path of the file. The path in the text is not a picture: the model asked to see it and
+ * has to see it, so the file goes back into the conversation as an image.
+ *
+ * Without this the model asks the tool to look at a picture, gets its size in words, and
+ * concludes that the picture cannot be rendered — and leaves the zones of the segmentation
+ * empty because it refuses to invent the boxes of a picture it cannot see.
+ * @param {string} root the project directory
+ * @param {string} text the answer of the tool
+ * @returns {Promise<object[]>} the parts of the request
+ * @exports
+ * @ai.hint io
+ */
+export async function pictureParts(root, text) {
+    const body = String(text ?? '');
+    if (!body.trim()) return [];
+    const found = new Set();
+    for (const match of body.matchAll(/[^\s"'`()]+\.(?:png|jpe?g|webp|gif)/gi)) {
+        const name = match[0].replace(/[.,;]+$/, '');
+        if (name) found.add(name);
+    }
+    const parts = [];
+    for (const name of [...found].slice(0, 4)) {
+        try {
+            const { abs } = await resolveInside(root, name, { allowRoot: false });
+            const bytes = await readFile(abs);
+            const mime = /\.jpe?g$/i.test(name) ? 'image/jpeg' : 'image/png';
+            parts.push(imagePart(bytes, mime));
+        } catch {
+            // The path is not a picture of the project: nothing to show.
+        }
+    }
+    return parts;
+}
 
 /**
  * Role instructions registry.
@@ -181,7 +221,7 @@ export function resolveRole(config, name, { model = null, effort = null, ceiling
  *   the user made about the money of the run — it lowers the effort, never raises it.
  * @returns {{ run: Function, resolve: Function }}
  */
-export function createRoleRunner({ client, config = {}, model = null, effort = null, ceiling = null, toolset = null, skills = null, context = null, onEvent = null } = {}) {
+export function createRoleRunner({ client, config = {}, model = null, effort = null, ceiling = null, toolset = null, skills = null, context = null, onEvent = null, root = process.cwd() } = {}) {
     /**
      * Run one role.
      * @param {string} name role name
@@ -328,6 +368,19 @@ export function createRoleRunner({ client, config = {}, model = null, effort = n
                         call_id: callId,
                         output: textOf(output).slice(0, 20_000),
                     });
+                    // A picture that the tool has made goes back into the conversation as a
+                    // picture: the model has to see what it has just looked at or cut, and a
+                    // path in the text is not a picture.
+                    const pictures = await pictureParts(root, textOf(output));
+                    if (pictures.length) {
+                        items.push({
+                            role: 'user',
+                            content: [
+                                textPart('The picture the tool has made. Look at it before you continue.'),
+                                ...pictures,
+                            ],
+                        });
+                    }
                 }
             }
 

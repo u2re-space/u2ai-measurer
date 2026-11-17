@@ -32,7 +32,8 @@ const int = (description) => ({ type: 'integer', description });
 export const TOOL_SPECS = Object.freeze({
     view_image: {
         configKey: 'image_view',
-        description: 'Look at an image file and read its pixel size. Use it before cropping or projecting a picture.',
+        description: 'Open an image file: the picture comes back into the conversation and its pixel size '
+            + 'comes with it. Use it before cropping or projecting a picture.',
         parameters: {
             type: 'object',
             properties: {

@@ -275,6 +275,7 @@ export async function runPipeline({
         toolset,
         skills,
         context,
+        root,
         onEvent: (event) => notify({ type: 'api', ...event }),
     });
 
