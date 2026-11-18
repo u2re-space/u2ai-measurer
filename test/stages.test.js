@@ -1233,8 +1233,7 @@ test('the pipeline writes the artifacts and the crops of a real run', async () =
         assert.ok(await stat(path.join(root, 'measurements', 'stages', 'recognition.json')).then((info) => info.isFile()));
         // The palette is read from the pixels and written next to the other parts.
         assert.ok(await stat(path.join(root, 'measurements', 'stages', 'palette.json')).then((info) => info.isFile()));
-        // The host was asked eight times over the Responses route: every role explores with the
-        // tools, and answers in the second call under the schema.
+        // Every role explores with the tools, and answers in a second call under the schema.
         assert.equal(host.calls.length, 8);
         assert.match(host.calls[0].url, /\/v1\/responses$/);
         assert.ok(host.calls[0].body.input_text === undefined);

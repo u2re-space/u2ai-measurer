@@ -142,6 +142,12 @@ export function roleContext(config, name) {
 const READ_ONLY_TOOLS = new Set([
     'view_image', 'sample_colors', 'parse_color', 'list_files', 'read_file', 'search_files',
 ]);
+const WRITE_READY_TOOL = Object.freeze({
+    type: 'function',
+    name: 'write_ready',
+    description: 'Signal that inspection is complete and you are ready to create or change files, images, or external artifacts. Call this alone before any such tool; the next turn gets the full output budget and the remaining tools.',
+    parameters: { type: 'object', properties: {}, required: [], additionalProperties: false },
+});
 
 /**
  * Whether a request has no structured/prose report to produce and can only inspect data.
@@ -277,6 +283,10 @@ export function createRoleRunner({ client, config = {}, model = null, effort = n
                 ? toolset.specsFor(name, role.tools ?? null)
                 : (toolset?.specs ?? null)
         );
+        const allTools = Array.isArray(tools) ? tools : [];
+        const readTools = allTools.filter((tool) => READ_ONLY_TOOLS.has(String(tool?.name ?? '')));
+        const hasActionTools = outputMode === 'read' && readTools.length < allTools.length;
+        const preWriteTools = [...readTools, ...(hasActionTools ? [WRITE_READY_TOOL] : [])];
         const schemaTool = schema ? (schemaName ?? 'response') : null;
 
         // Where the schema travels.
@@ -289,8 +299,6 @@ export function createRoleRunner({ client, config = {}, model = null, effort = n
         const mode = !schema
             ? 'plain'
             : (schemaMode === 'auto' ? (tools?.length ? 'separate' : 'tool') : schemaMode);
-        const readOnly = readOnlyRequest({ schema, mode, tools, outputMode });
-
         // The brief of the context: what this run already knows. The role does not have to
         // rediscover the paths of the pictures or the decisions of the earlier stages.
         const brief = typeof context?.brief === 'function' ? context.brief() : '';
@@ -300,6 +308,9 @@ export function createRoleRunner({ client, config = {}, model = null, effort = n
             docs,
             skillText,
             brief,
+            hasActionTools
+                ? 'Before creating or changing files, images, or external artifacts, call `write_ready` alone. Until then, only inspection tools are available. After `write_ready`, continue with the requested action; the next turn has the full output budget.'
+                : '',
         ].filter(Boolean).join('\n\n');
         if (!baseInstructions) {
             return {
@@ -336,6 +347,7 @@ export function createRoleRunner({ client, config = {}, model = null, effort = n
             const items = [];
             let answer = null;
             let prose = '';
+            let writeReady = false;
             const turns = Math.max(1, Number.isSafeInteger(maxTurns) ? maxTurns : 1);
             for (let turn = 0; turn < turns; turn++) {
                 // The model has to know how much budget is left: a model that does not know it
@@ -348,49 +360,81 @@ export function createRoleRunner({ client, config = {}, model = null, effort = n
                         : 'Answer as soon as you have what you need.',
                     'A measured part and a null are worth more than another look.',
                 ].join(' ');
+                const activeTools = !writeReady && hasActionTools ? preWriteTools : allTools;
+                const schemaThisTurn = mode === 'tool' && schema && (!hasActionTools || writeReady);
+                const reduced = !writeReady && hasActionTools
+                    || readOnlyRequest({
+                        schema: schemaThisTurn ? schema : null,
+                        mode: schemaThisTurn ? 'tool' : (mode === 'separate' ? 'separate' : 'plain'),
+                        tools: activeTools.filter((tool) => tool.name !== WRITE_READY_TOOL.name),
+                        outputMode,
+                    });
                 answer = await client.responses.create({
                     model: usedModel,
                     instructions: note ? `${roleInstructions}${note}` : roleInstructions,
                     input: turn === 0 ? userInput : [...userInput, ...items],
-                    tools,
-                    schema: mode === 'tool' ? schema : null,
+                    tools: activeTools,
+                    schema: schemaThisTurn ? schema : null,
                     schemaName: schemaTool ?? 'response',
-                    maxOutputTokens: maxOutputFor(usedModel, config, role.maxOutputTokens, { readOnly }),
-                    verbosity: config?.verbosity ?? (readOnly ? 'low' : null),
+                    maxOutputTokens: maxOutputFor(usedModel, config, role.maxOutputTokens, { readOnly: reduced }),
+                    verbosity: config?.verbosity ?? (reduced ? 'low' : null),
                     effort: role.effort,
                     signal,
                     onEvent,
                 });
-                const parsed = parseResponse(answer, { schemaName: mode === 'tool' ? schemaTool : null });
+                const parsed = parseResponse(answer, { schemaName: schemaThisTurn ? schemaTool : null });
                 last = parsed;
-                for (const call of parsed.toolCalls) trace.push({ tool: call.name, args: call.arguments });
+                for (const call of parsed.toolCalls) {
+                    if (call.name !== WRITE_READY_TOOL.name) trace.push({ tool: call.name, args: call.arguments });
+                }
 
                 // The schema call is the answer: the sheet is in its arguments.
                 if (parsed.schemaAnswer) return parsed;
+                const prematureSchema = !schemaThisTurn
+                    && parsed.toolCalls.some((call) => call.name === schemaTool);
+                if (prematureSchema) break;
 
                 prose = parsed.text ?? '';
-                if (!parsed.toolCalls.length || !toolset) break;
+                const workCalls = parsed.toolCalls.filter((call) => call.name !== schemaTool);
+                if (!workCalls.length || !toolset) break;
 
                 // Run the calls and feed the results back to the model.
-                for (const [index, call] of parsed.toolCalls.entries()) {
+                const readyAtTurnStart = writeReady;
+                for (const [index, call] of workCalls.entries()) {
                     const callId = call.callId ?? call.id ?? `call_${turn}_${index}`;
                     let output = '';
                     // The reader sees the calls: a model that measures for minutes is doing
                     // something, and the terminal must not look empty while it works.
-                    onEvent?.({ type: 'tool.call', name: call.name, arguments: call.arguments });
+                    if (call.name !== WRITE_READY_TOOL.name) {
+                        onEvent?.({ type: 'tool.call', name: call.name, arguments: call.arguments });
+                    }
                     try {
-                        output = await toolset.execute(call.name, call.arguments);
+                        if (call.name === WRITE_READY_TOOL.name && !readyAtTurnStart && workCalls.length === 1 && parsed.toolCalls.length === 1 && !call.parseError) {
+                            writeReady = true;
+                            output = 'Write-ready. The next turn has the full output budget and the remaining tools.';
+                            onEvent?.({ type: 'role.write_ready', role: name, stage });
+                        } else if (call.parseError) {
+                            output = `Tool error: the arguments of the call are not a JSON object (${call.parseError}). Call it again with valid JSON.`;
+                        } else if (!readyAtTurnStart && !READ_ONLY_TOOLS.has(call.name)) {
+                            output = 'The tool was not run: call write_ready first. The next turn will have the full output budget.';
+                        } else if (call.name === WRITE_READY_TOOL.name) {
+                            output = 'write_ready must be called alone, before any action-capable tool.';
+                        } else {
+                            output = await toolset.execute(call.name, call.arguments);
+                        }
                     } catch (error) {
                         output = `Tool error: ${error?.message ?? error}`;
                     }
                     // The answer of the tool says what was read or written: the picture, the
                     // colours, the file. The reader has to see it, not only the model.
-                    onEvent?.({
-                        type: 'tool.result',
-                        name: call.name,
-                        output: textOf(output).slice(0, 4000),
-                        error: output.startsWith('Tool error:'),
-                    });
+                    if (call.name !== WRITE_READY_TOOL.name) {
+                        onEvent?.({
+                            type: 'tool.result',
+                            name: call.name,
+                            output: textOf(output).slice(0, 4000),
+                            error: output.startsWith('Tool error:'),
+                        });
+                    }
                     items.push({ type: 'function_call', call_id: callId, name: call.name, arguments: call.raw });
                     items.push({
                         type: 'function_call_output',
@@ -413,7 +457,29 @@ export function createRoleRunner({ client, config = {}, model = null, effort = n
                 }
             }
 
-            if (mode !== 'separate' || !schema) return last;
+            if (!schema) {
+                if (outputMode === 'read' || !hasActionTools || writeReady) return last;
+            } else if (mode !== 'separate' && !(mode === 'tool' && hasActionTools && !writeReady)) {
+                return last;
+            }
+
+            if (!schema && hasActionTools && !writeReady && outputMode !== 'read') {
+                answer = await client.responses.create({
+                    model: usedModel,
+                    instructions: `${baseInstructions}\n\nInspection is complete. Give the requested concise final answer now.`,
+                    input: [...userInput, ...items],
+                    tools: null,
+                    maxOutputTokens: maxOutputFor(usedModel, config, role.maxOutputTokens),
+                    verbosity: config?.verbosity ?? null,
+                    effort: role.effort,
+                    signal,
+                    onEvent,
+                });
+                last = parseResponse(answer, { schemaName: null });
+                return last;
+            }
+
+            if (!schema) return last;
 
             // --- the second phase: the answer, under the schema ----------------------
             const ask = [
