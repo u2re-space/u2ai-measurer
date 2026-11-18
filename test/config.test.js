@@ -37,7 +37,7 @@ test('the defaults load when there is no config file', async () => {
     try {
         const config = await loadConfig({ env, cwd: process.cwd(), ensureHome: false });
         //assert.equal(config.model, 'openai/gpt-6-luna');
-        assert.equal(config.model, 'google/gemini-4-hydrogen');
+        assert.equal(config.model, 'openai/gpt-6.2-sol');
         assert.equal(config.agent.design, 'off');
         assert.equal(config.stages.measure.enabled, true);
         assert.equal(config.output.dir, './measurements');
