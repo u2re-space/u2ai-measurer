@@ -27,8 +27,8 @@ test('the profile of a model of the house is tuned by the cards of the gateway',
     assert.equal(kimi.ceiling, 'high', 'the levels above it cost the same seconds');
 
     const luna = MODEL_PROFILES['openai/gpt-6-luna'];
-    assert.equal(luna.window, 272 * 1024 * 4, '272K tokens of context');
-    assert.equal(luna.maxOutput, 128 * 1024, '128K output tokens');
+    assert.equal(luna.window, 1048576, '272K tokens of context');
+    assert.equal(luna.maxOutput, 128 * 1000, '128K output tokens');
 });
 
 test('the effort is pulled down to the ladder of the model', () => {
