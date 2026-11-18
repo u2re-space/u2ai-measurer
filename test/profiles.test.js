@@ -8,7 +8,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { MODEL_PROFILES, getModelProfile, snapEffort } from '../src/model/profiles.js';
+import { MODEL_PROFILES, getModelProfile, maxOutputFor, snapEffort } from '../src/model/profiles.js';
 
 test('the profile of a model of the house is tuned by the cards of the gateway', () => {
     const gemini = MODEL_PROFILES['google/gemini-4-hydrogen'];
@@ -43,4 +43,11 @@ test('the effort is pulled down to the ladder of the model', () => {
 
     const minimax = getModelProfile('minimax/minimax-m3.1-flash');
     assert.equal(snapEffort('none', minimax), 'low', 'the endpoint refuses to work without reasoning');
+});
+
+test('the output cap is quartered only for explicitly read-only calls', () => {
+    assert.equal(maxOutputFor('google/gemini-4-hydrogen', null, null, { readOnly: true }), 16_384);
+    assert.equal(maxOutputFor('google/gemini-4-hydrogen', null, 32_000, { readOnly: true }), 8_000);
+    assert.equal(maxOutputFor('google/gemini-4-hydrogen'), 65_536);
+    assert.equal(maxOutputFor('google/gemini-4-hydrogen', null, 16, { readOnly: true }), 4);
 });

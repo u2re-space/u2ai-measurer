@@ -16,7 +16,8 @@
  *
  * @depends openai/responses, openai/fallback, model/profiles, model/trust, agent/documentation
  * @usedBy shared/pipeline, stages
- * @exports ROLE_INSTRUCTIONS, resolveRoleInstructions, resolveRole, createRoleRunner, roleContext
+ * @exports ROLE_INSTRUCTIONS, resolveRoleInstructions, resolveRole, readOnlyRequest,
+ *          createRoleRunner, roleContext
  * @ai.tags roles
  * @ai.hint keep
  * @ai.hint legacy-0.2
@@ -31,7 +32,7 @@ import { instructions as resolverInstructions } from './resolver.js';
 import { instructions as designerInstructions } from './designer.js';
 import { parseResponse, textPart, imagePart } from '../openai/responses.js';
 import { withModelFallback } from '../openai/fallback.js';
-import { getModelProfile, snapEffort, capEffort } from '../model/profiles.js';
+import { getModelProfile, maxOutputFor, snapEffort, capEffort } from '../model/profiles.js';
 import { SAFE_MODEL, SAFE_EFFORT, isTrusted } from '../model/trust.js';
 import { documentationFor } from '../agent/documentation.js';
 import { schemaProblems } from '../agent/schemas.js';
@@ -137,6 +138,29 @@ export function roleContext(config, name) {
     return documentationFor(Array.isArray(wanted) ? wanted : []);
 }
 
+/** Tools that inspect data without writing files, cropping images, or invoking another CLI. */
+const READ_ONLY_TOOLS = new Set([
+    'view_image', 'sample_colors', 'parse_color', 'list_files', 'read_file', 'search_files',
+]);
+
+/**
+ * Whether a request has no structured/prose report to produce and can only inspect data.
+ *
+ * The separate schema phase intentionally reports its measurements in prose, so it keeps the
+ * full output budget even though that individual request does not carry the schema.
+ * Unknown and external tools are conservative: they do not qualify as read-only.
+ * @param {{ schema?: object|null, mode?: string, tools?: object[]|null, outputMode?: string }} request
+ * @returns {boolean}
+ * @exports
+ * @ai.hint pure
+ */
+export function readOnlyRequest({ schema = null, mode = 'plain', tools = null, outputMode = 'report' } = {}) {
+    if (schema || mode !== 'plain' || outputMode !== 'read') return false;
+    if (tools == null) return true;
+    if (!Array.isArray(tools)) return false;
+    return tools.every((tool) => READ_ONLY_TOOLS.has(String(tool?.name ?? '')));
+}
+
 /**
  * Resolve a role into the settings of one call.
  *
@@ -150,7 +174,8 @@ export function roleContext(config, name) {
  * @param {{ model?: string|null, effort?: string|null, ceiling?: string|null }} [overrides]
  *   settings of this run: `effort` is what the stage asks for, `ceiling` is the promise the
  *   user made about the money of the run.
- * @returns {{ name: string, model: string|null, effort: string|null, instructions: string|null, tools: string[]|null, context: string|null }}
+ * @returns {{ name: string, model: string|null, effort: string|null, instructions: string|null,
+ *   tools: string[]|null, context: string|null, maxOutputTokens: number|null }}
  * @exports
  */
 export function resolveRole(config, name, { model = null, effort = null, ceiling = null } = {}) {
@@ -203,6 +228,7 @@ export function resolveRole(config, name, { model = null, effort = null, ceiling
         instructions: pick('instructions') ?? resolveRoleInstructions(name),
         tools: Array.isArray(role?.tools) ? role.tools : null,
         context: pick('context'),
+        maxOutputTokens: pick('maxOutputTokens') ?? config?.maxOutputTokens ?? null,
     };
 }
 
@@ -229,14 +255,14 @@ export function createRoleRunner({ client, config = {}, model = null, effort = n
      *   schemaName?: string|null, schemaMode?: 'auto'|'tool'|'separate', maxTurns?: number,
      *   model?: string|null, effort?: string|null, ceiling?: string|null,
      *   signal?: AbortSignal|null, extraTools?: object[], withDocumentation?: boolean,
-     *   stage?: string|null }} [params]
+     *   stage?: string|null, outputMode?: 'read'|'report' }} [params]
      * @returns {Promise<{ status: string, data: object|null, text: string, toolCalls: object[], usage: object|null, error: string|null, model: string|null, trace: object[] }>}
      */
     async function run(name, {
         text = '', parts = [], instructions = null, schema = null, schemaName = null,
         schemaMode = 'auto', maxTurns = 1, model: runModel = null, effort: runEffort = null,
         ceiling: runCeiling = null, signal = null, extraTools = null, withDocumentation = true,
-        stage = null,
+        stage = null, outputMode = 'report',
     } = {}) {
         const role = resolveRole(config, name, {
             model: runModel ?? model,
@@ -263,6 +289,7 @@ export function createRoleRunner({ client, config = {}, model = null, effort = n
         const mode = !schema
             ? 'plain'
             : (schemaMode === 'auto' ? (tools?.length ? 'separate' : 'tool') : schemaMode);
+        const readOnly = readOnlyRequest({ schema, mode, tools, outputMode });
 
         // The brief of the context: what this run already knows. The role does not have to
         // rediscover the paths of the pictures or the decisions of the earlier stages.
@@ -328,6 +355,8 @@ export function createRoleRunner({ client, config = {}, model = null, effort = n
                     tools,
                     schema: mode === 'tool' ? schema : null,
                     schemaName: schemaTool ?? 'response',
+                    maxOutputTokens: maxOutputFor(usedModel, config, role.maxOutputTokens, { readOnly }),
+                    verbosity: config?.verbosity ?? (readOnly ? 'low' : null),
                     effort: role.effort,
                     signal,
                     onEvent,
@@ -418,6 +447,8 @@ export function createRoleRunner({ client, config = {}, model = null, effort = n
                 schema,
                 schemaName: schemaTool ?? 'response',
                 schemaChannel: 'format',
+                maxOutputTokens: maxOutputFor(usedModel, config, role.maxOutputTokens),
+                verbosity: config?.verbosity ?? null,
                 effort: role.effort,
                 signal,
                 onEvent,

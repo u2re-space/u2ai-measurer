@@ -7,7 +7,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { ROLE_INSTRUCTIONS, createRoleRunner, resolveRole, resolveRoleInstructions, roleContext } from '../src/roles/index.js';
+import { ROLE_INSTRUCTIONS, createRoleRunner, readOnlyRequest, resolveRole, resolveRoleInstructions, roleContext } from '../src/roles/index.js';
 import {
     CROP_PLAN_SCHEMA,
     DESIGN_SCHEMA,
@@ -151,9 +151,11 @@ test('the problems of an answer are told as one line', () => {
 });
 
 test('the runner reads the JSON answer of a role', async () => {
+    let request;
     const client = {
         responses: {
             async create(params) {
+                request = params;
                 assert.equal(params.model, 'vendor/default');
                 assert.match(params.instructions, /measurer/);
                 return { output_text: JSON.stringify({ summary: 'ok' }), output: [] };
@@ -165,6 +167,57 @@ test('the runner reads the JSON answer of a role', async () => {
     assert.equal(answer.status, 'completed');
     assert.deepEqual(answer.data, { summary: 'ok' });
     assert.equal(answer.error, null);
+    assert.equal(request.maxOutputTokens, 16_384, 'report operations keep the full model cap');
+    assert.equal(request.verbosity, null);
+});
+
+test('only explicit read-only calls with read tools get the reduced budget', () => {
+    const readers = [{ name: 'view_image' }, { name: 'read_file' }];
+    assert.equal(readOnlyRequest({ mode: 'plain', tools: readers, outputMode: 'read' }), true);
+    assert.equal(readOnlyRequest({ mode: 'plain', tools: null, outputMode: 'read' }), true);
+    assert.equal(readOnlyRequest({ mode: 'plain', tools: readers }), false, 'reports default to full output');
+    assert.equal(readOnlyRequest({ mode: 'plain', tools: [{ name: 'crop_image' }], outputMode: 'read' }), false);
+    assert.equal(readOnlyRequest({ mode: 'plain', tools: [{ name: 'call_ai_decompose' }], outputMode: 'read' }), false);
+    assert.equal(readOnlyRequest({ mode: 'separate', tools: readers, outputMode: 'read' }), false);
+    assert.equal(readOnlyRequest({ mode: 'plain', tools: [{ name: 'mcp:search' }], outputMode: 'read' }), false);
+});
+
+test('explicit read-only role requests send one quarter of maxOutput and low verbosity', async () => {
+    const calls = [];
+    const client = {
+        responses: {
+            async create(params) {
+                calls.push(params);
+                return { output_text: 'Found the reference.', output: [] };
+            },
+        },
+    };
+    const toolset = { specsFor: () => [{ type: 'function', name: 'read_file' }] };
+    const runner = createRoleRunner({ client, config: configFor({ model: 'google/gemini-4-hydrogen' }), toolset });
+    await runner.run('measurer', { text: 'Inspect only.', outputMode: 'read' });
+    assert.equal(calls[0].maxOutputTokens, 16_384);
+    assert.equal(calls[0].verbosity, 'low');
+});
+
+test('configured verbosity overrides the low read-only default', async () => {
+    let request;
+    const client = {
+        responses: {
+            async create(params) {
+                request = params;
+                return { output_text: 'Found the reference.', output: [] };
+            },
+        },
+    };
+    const toolset = { specsFor: () => [{ type: 'function', name: 'read_file' }] };
+    const runner = createRoleRunner({
+        client,
+        config: configFor({ model: 'google/gemini-4-hydrogen', verbosity: 'high' }),
+        toolset,
+    });
+    await runner.run('measurer', { text: 'Inspect only.', outputMode: 'read' });
+    assert.equal(request.maxOutputTokens, 16_384);
+    assert.equal(request.verbosity, 'high');
 });
 
 test('the runner executes the tools the model asks for and feeds the answers back', async () => {
@@ -247,9 +300,13 @@ test('a role with tools looks first and answers afterwards', async () => {
     // The first phase looks and carries no schema.
     assert.equal(calls[0].schema, null);
     assert.ok(calls[0].tools.length > 0);
+    assert.equal(calls[0].maxOutputTokens, 16_384, 'the measurement/prose phase keeps the report budget');
+    assert.equal(calls[0].verbosity, null);
     // The second phase answers under the schema and calls no tool.
     assert.equal(calls[2].tools, null);
     assert.equal(calls[2].schemaChannel, 'format');
+    assert.equal(calls[2].maxOutputTokens, 16_384, 'the structured sheet keeps the report budget');
+    assert.equal(calls[2].verbosity, null);
     assert.deepEqual(answer.data, { summary: 'done' });
 });
 
