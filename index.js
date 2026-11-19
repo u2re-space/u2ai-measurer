@@ -5,6 +5,7 @@
  * @ai.hint keep
  */
 export { main, parseArgv } from './src/cli.js';
+export { mainTui } from './src/tui/cli.js';
 export { HELP } from './src/help.js';
 export * from './src/config.js';
 export * from './src/image/colors.js';

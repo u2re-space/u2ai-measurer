@@ -5,7 +5,8 @@
   "type": "module",
   "main": "./index.js",
   "bin": {
-    "ai-measure": "./bin/ai-measure.js"
+    "ai-measure": "./bin/ai-measure.js",
+    "ai-measure-worker": "./bin/ai-measure-worker.js"
   },
   "repository": {
     "type": "git",
@@ -44,7 +45,8 @@
     "@resvg/resvg-js": "^2.6.2",
     "canvas": "^4.0.0-rc3",
     "culori": "^4.0.2",
-    "sharp": "^0.35.5"
+    "sharp": "^0.35.5",
+    "terminal-kit": "^3.1.4"
   },
   "allowScripts": {
     "canvas@3.2.3": true,

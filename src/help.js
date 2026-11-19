@@ -31,6 +31,15 @@ export const HELP = `ai-measure — turn a reference picture into CSS-ready numb
 Usage:
   ai-measure <command> [options]
 
+Interface:
+  In a terminal, ai-measure opens the graphical dashboard of the house: the stages,
+  the progress, the live log and the operator line. The internal worker is
+  ai-measure-worker; it owns the ordinary stdout and stderr and talks to the shell
+  over a versioned IPC protocol.
+
+  A pipe, a redirect, --json, --quiet and --headless use the worker directly. The
+  machine output stays the same: --json prints one json object per line on stdout.
+
 Commands:
   measure <image...>   Measure the references and write the artifacts.
   design <image...>    Produce the visual design direction only.
@@ -65,6 +74,10 @@ Options:
       --out-dir <dir>   Where the tiles are written.
       --dry-run         Print the plan and stop.
       --verbose         Print more.
+      --json            One json object per line on stdout.
+      --quiet           Only the result of the run.
+      --headless        The worker without the graphical shell.
+      --ascii           The symbols of the terminal without the unicode ones.
   -h, --help            This text.
   -v, --version         The version of the package.
 

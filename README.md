@@ -24,6 +24,12 @@ npm install
 node bin/ai-measure.js --help
 ```
 
+In a terminal the command opens the graphical dashboard of the house: the stages, the progress,
+the live log and the operator line. The internal worker is `ai-measure-worker`; it owns the
+ordinary stdout and stderr and talks to the shell over a versioned IPC protocol. A pipe, a
+redirect, `--json`, `--quiet` and `--headless` use the worker directly: the machine output
+stays the same (`--json` prints one json object per line on stdout).
+
 ## Pipeline
 
 Six stages run in sequence, and every one of them may run alone. Each stage writes its own file

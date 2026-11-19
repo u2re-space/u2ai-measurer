@@ -88,6 +88,10 @@ export function parseArgv(argv) {
             'out-dir': { type: 'string' },
             verbose: { type: 'boolean', default: false },
             'dry-run': { type: 'boolean', default: false },
+            json: { type: 'boolean', default: false },
+            quiet: { type: 'boolean', default: false },
+            headless: { type: 'boolean', default: false },
+            ascii: { type: 'boolean', default: false },
             help: { type: 'boolean', short: 'h', default: false },
             version: { type: 'boolean', short: 'v', default: false },
         },
@@ -111,6 +115,16 @@ export function parseArgv(argv) {
     return {
         command,
         images,
+        args: images,
+        flags: {
+            json: parsed.values.json === true,
+            quiet: parsed.values.quiet === true,
+            headless: parsed.values.headless === true,
+            ascii: parsed.values.ascii === true,
+            verbose: parsed.values.verbose === true,
+            help: parsed.values.help === true,
+            version: parsed.values.version === true,
+        },
         out: parsed.values.out ?? null,
         outDir: parsed.values['out-dir'] ?? null,
         configPath: parsed.values.config ?? null,
@@ -318,12 +332,16 @@ async function commandSkills(config) {
 
 /**
  * Main entry point: parse the arguments, load the config, dispatch the command.
+ *
+ * The renderer and the operator channel may come from the worker: the graphical shell
+ * runs the same command in its own process and listens to the events over the protocol.
  * @param {string[]} argv
+ * @param {{ renderer?: object|null, input?: object|null }} [options]
  * @returns {Promise<number>} the exit code
  * @exports
  * @ai.hint io
  */
-export async function main(argv = process.argv.slice(2)) {
+export async function main(argv = process.argv.slice(2), { renderer: given = null, input = null } = {}) {
     // A run that dies must say so.
     //
     // A thinking model works for minutes, and the process may be killed or may fall over
@@ -411,9 +429,9 @@ export async function main(argv = process.argv.slice(2)) {
     }
 
     const isTTY = detectMode() === 'tty';
-    const renderer = isTTY
+    const renderer = given ?? (isTTY
         ? createRenderer({ verbose: opts.verbose })
-        : createPlainRenderer({ verbose: opts.verbose });
+        : createPlainRenderer({ verbose: opts.verbose }));
 
     try {
         const client = await createClient({
