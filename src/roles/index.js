@@ -33,7 +33,8 @@ import { instructions as designerInstructions } from './designer.js';
 import { parseResponse, textPart, imagePart } from '../openai/responses.js';
 import { withModelFallback } from '../openai/fallback.js';
 import { getModelProfile, maxOutputFor, snapEffort, capEffort } from '../model/profiles.js';
-import { SAFE_MODEL, SAFE_EFFORT, isTrusted } from '../model/trust.js';
+import { resolveModelRef } from '../model/families.js';
+import { houseModel, safeEffort, safeModel, isTrusted } from '../model/trust.js';
 import { documentationFor } from '../agent/documentation.js';
 import { schemaProblems } from '../agent/schemas.js';
 import { resolveInside } from '../agent/paths.js';
@@ -173,8 +174,12 @@ export function readOnlyRequest({ schema = null, mode = 'plain', tools = null, o
  * The chain is role → `roles.default` → the top level of the config. The effort is clamped to
  * what the model accepts and to the ceiling of the role.
  *
+ * The model has one link more: the model of the house for the role (`house.models` of the
+ * config) stands between the pin of the role and the pin of the default role.
+ *
  * A model that is not trusted with the role does not answer it: the role moves to the safe
- * model of the house (`model/trust`). The pin of the role in the config is never moved.
+ * model of the house (`house.safe` of the config). The pin of the role in the config is never
+ * moved.
  * @param {object} config
  * @param {string} name
  * @param {{ model?: string|null, effort?: string|null, ceiling?: string|null }} [overrides]
@@ -197,28 +202,30 @@ export function resolveRole(config, name, { model = null, effort = null, ceiling
         return null;
     };
 
-    // The model of the role: the pin of the run wins, then the pin of the role, then the pin of
-    // the default role, then the model of the configuration.
-    const runModel = model ? String(model) : null;
-    const roleModel = role?.model ? String(role.model) : null;
-    const wantedModel = runModel
-        ?? roleModel
-        ?? (fallback?.model ? String(fallback.model) : null)
-        ?? textOf(config?.model)
-        ?? null;
-    // The trust rule: a model that is not trusted with the role does not answer it — the role
-    // goes to the safe model of the house. The pin of the role itself is never moved: the user
-    // named that model for that role on purpose.
-    const moved = !(roleModel && !runModel) && !isTrusted(name, wantedModel);
-    const resolvedModel = moved ? SAFE_MODEL : wantedModel;
-    const profile = getModelProfile(resolvedModel, config);
-
     // The effort of the role in the config wins over the one of the stage: the role is the
     // narrower name of the same worker.
     const wantedEffort = pick('effort') ?? effort ?? textOf(config?.reasoning?.effort) ?? null;
+
+    // The model of the role: the pin of the run wins, then the pin of the role, then the
+    // model of the house for the role, then the pin of the default role, then the model of
+    // the configuration.
+    const runModel = model ? String(model) : null;
+    const roleModel = role?.model ? String(role.model) : null;
+    const wantedModel = resolveModelRef(runModel, config, { effort: wantedEffort })
+        ?? resolveModelRef(roleModel, config, { effort: wantedEffort })
+        ?? houseModel(name, config, { effort: wantedEffort })
+        ?? resolveModelRef(fallback?.model ? String(fallback.model) : null, config, { effort: wantedEffort })
+        ?? resolveModelRef(textOf(config?.model) || null, config, { effort: wantedEffort });
+    // The trust rule: a model that is not trusted with the role does not answer it — the role
+    // goes to the safe model of the house. The pin of the role itself is never moved: the user
+    // named that model for that role on purpose.
+    const moved = !(roleModel && !runModel) && !isTrusted(name, wantedModel, config);
+    const resolvedModel = moved ? safeModel(config, { effort: wantedEffort }) : wantedModel;
+    const profile = getModelProfile(resolvedModel, config);
+
     // A role that moved to the safe model works on `medium`: the levels above it cost the same
     // seconds anyway, and the stage asked for them of a model that was not trusted.
-    const movedEffort = moved && !role?.effort ? SAFE_EFFORT : wantedEffort;
+    const movedEffort = moved && !role?.effort ? safeEffort(config) : wantedEffort;
     let resolvedEffort = snapEffort(movedEffort, profile);
     // Two ceilings: the one of the role and the one of the run. The lower of them wins.
     for (const cap of [pick('maxEffort'), ceiling]) {

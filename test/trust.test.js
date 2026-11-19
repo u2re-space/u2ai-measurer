@@ -9,7 +9,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { resolveRole } from '../src/roles/index.js';
-import { SAFE_EFFORT, SAFE_MODEL, UNTRUSTED, isTrusted } from '../src/model/trust.js';
+import { SAFE_EFFORT, SAFE_MODEL, UNTRUSTED, isTrusted, safeEffort, safeModel } from '../src/model/trust.js';
 
 const GEMINI = 'google/gemini-4-hydrogen';
 
@@ -88,4 +88,42 @@ test('the ceiling of the run still lowers the moved stage', () => {
     const segmentator = resolveRole(config, 'segmentator', { effort: 'max', ceiling: 'low' });
     assert.equal(segmentator.model, SAFE_MODEL);
     assert.equal(segmentator.effort, 'low');
+});
+
+test('the config decides the safe model and the effort of it', () => {
+    const config = configFor({
+        house: {
+            models: {},
+            safe: { model: 'openai/gpt-6.1-terra', effort: 'low' },
+            untrusted: { [GEMINI]: ['segmentator'] },
+        },
+    });
+    assert.equal(safeModel(config), 'openai/gpt-6.1-terra');
+    assert.equal(safeEffort(config), 'low');
+    const segmentator = resolveRole(config, 'segmentator', { effort: 'max' });
+    assert.equal(segmentator.model, 'openai/gpt-6.1-terra');
+    assert.equal(segmentator.effort, 'low');
+});
+
+test('the config decides the table of the untrusted models', () => {
+    const config = configFor({
+        house: { models: {}, safe: { model: SAFE_MODEL, effort: SAFE_EFFORT }, untrusted: { 'minimax/minimax-m3.1-flash': ['cropper'] } },
+    });
+    assert.equal(isTrusted('cropper', 'minimax/minimax-m3.1-flash', config), false);
+    assert.equal(isTrusted('segmentator', 'minimax/minimax-m3.1-flash', config), true);
+    // The built-in table is gone: the Gemini is trusted with the stages now.
+    assert.equal(isTrusted('cropper', GEMINI, config), true);
+    const cropper = resolveRole(config, 'cropper', { model: 'minimax/minimax-m3.1-flash', effort: 'high' });
+    assert.equal(cropper.model, SAFE_MODEL);
+});
+
+test('the house may name a model of its own for a role', () => {
+    const config = configFor({
+        house: { models: { measurer: 'openai/gpt-6.1-terra' }, safe: { model: SAFE_MODEL, effort: SAFE_EFFORT }, untrusted: {} },
+    });
+    const measurer = resolveRole(config, 'measurer', { effort: 'high' });
+    assert.equal(measurer.model, 'openai/gpt-6.1-terra');
+    // The other roles keep the model of the run.
+    const designer = resolveRole(config, 'designer', { effort: 'high' });
+    assert.equal(designer.model, GEMINI);
 });

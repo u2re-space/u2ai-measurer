@@ -12,7 +12,8 @@ import { defaults } from '../src/config/defaults.js';
 const config = (models) => ({ fallback: { enabled: true, models } });
 
 test('the chain of the house starts with the Kimi', () => {
-    // The Gemini is the model of the run, the Kimi answers when it refuses.
+    // The Gemini is the model of the run, the Kimi answers when it refuses. The ladder of
+    // the family of the Gemini stands at the end of the chain.
     assert.deepEqual(
         fallbackChain(defaults, 'google/gemini-4-hydrogen'),
         [
@@ -20,6 +21,7 @@ test('the chain of the house starts with the Kimi', () => {
             'moonshotai/kimi-k3.1-pro',
             'openai/gpt-6.1-terra',
             'anthropic/claude-sonnet-5.5',
+            'google/gemini-4-neon',
         ],
     );
     // Every other model falls back to the Kimi too.

@@ -17,6 +17,7 @@ export * from './image/crop.js';
 export * from './image/colors.js';
 export * from './image/quantizer.js';
 export * from './model/profiles.js';
+export * from './model/families.js';
 export * from './model/trust.js';
 export * from './roles/index.js';
 export * from './agent/tools.js';

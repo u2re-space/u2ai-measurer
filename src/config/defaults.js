@@ -27,6 +27,42 @@ export const defaults = {
   maxOutputTokens: null,
   /** Per-model ceilings: { "<model>": { window, maxOutput, ceiling } }. */
   models: {},
+
+  // --- the house of the run ----------------------------------------------------
+  /**
+   * The house of the run: the models that the house trusts with the roles of a run.
+   *
+   * `models` is the model of the house for the roles that have one: a role that is named
+   * here does not answer on the model of the run, it answers on the model of the house. The
+   * config may change every name of the map and may put a family of models in its place
+   * (`family:gpt`); a role that is named with an empty value has no model of its own.
+   *
+   * `safe` is the model the house trusts with the roles that the model of the run is not
+   * trusted with, and the effort that model works on.
+   *
+   * `untrusted` is the table of the trust: the key is the model (or a family of models) and
+   * the value is the list of the roles that move to the safe model.
+   */
+  house: {
+    models: {},
+    safe: { model: 'moonshotai/kimi-k3.1-pro', effort: 'high' },
+    untrusted: { 'google/gemini-4-hydrogen': ['segmentator', 'cropper', 'recognizer'] },
+  },
+  /**
+   * The families of models: a named list of interchangeable models, from the cheapest to
+   * the most expensive.
+   *
+   * A family is named where a model is expected with the prefix `family:`: the run answers
+   * with the cheapest member of the family that takes the effort of the role, and the rest
+   * of the list is the ladder of the budget — the next member answers when the first one
+   * refuses.
+   */
+  modelFamilies: {
+    gpt: ['openai/gpt-6.1-terra', 'openai/gpt-6.2-sol'],
+    gemini: ['google/gemini-4-hydrogen', 'google/gemini-4-neon'],
+    claude: ['anthropic/claude-haiku-5.5', 'anthropic/claude-sonnet-5.5'],
+  },
+
   reasoning: { effort: 'high', summary: 'auto', mode: null },
   retries: 3,
   /**
@@ -352,6 +388,12 @@ export function defaultConfigText() {
       resolve: { enabled: true, mode: defaults.stages.resolve.mode },
       design: { enabled: true },
     },
+    house: {
+      models: structuredClone(defaults.house.models),
+      safe: structuredClone(defaults.house.safe),
+      untrusted: structuredClone(defaults.house.untrusted),
+    },
+    modelFamilies: structuredClone(defaults.modelFamilies),
   };
   return `${JSON.stringify(starter, null, 2)}\n`;
 }

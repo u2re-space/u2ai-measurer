@@ -48,7 +48,8 @@ Options:
       --stages <list>   The stages to run: segmentate, crop, measure, recognize, sample, resolve,
                         design. Every stage may run alone; the work of a stage is written to the
                         output directory, so the stage after it reads the file of the stage before.
-  -m, --model <id>      The model of the roles.
+  -m, --model <id>      The model of the roles. May be a family of models: family:<name>
+                        takes the cheapest member of the family.
       --effort <level>  The ceiling of the run: low, medium, high, xhigh. It lowers the effort
                          a stage asks for, never raises it.
       --task <text>     The task the design direction answers.

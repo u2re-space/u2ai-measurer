@@ -12,6 +12,81 @@
 import { ENUMS, HEADER_NAME, SUPPORT_ALIASES } from './constants.js';
 import { defaults, ROLE_FIELDS } from './defaults.js';
 import { isRecord } from './merge.js';
+import { familyName } from '../model/families.js';
+
+/**
+ * Check that a reference to a family names a family that exists.
+ * @param {unknown} ref the reference: a model or `family:<name>`
+ * @param {string} where the path of the reference
+ * @param {(message: string) => never} fail
+ * @param {object} families the families of the config
+ */
+function checkFamilyRef(ref, where, fail, families) {
+  const name = familyName(ref);
+  if (name && !Object.hasOwn(families ?? {}, name)) {
+    fail(`${where}: семейство моделей "${name}" не найдено (modelFamilies)`);
+  }
+}
+
+/**
+ * Validate the families of models: { "<name>": ["<model>", ...] }.
+ * @param {unknown} families
+ * @param {(message: string) => never} fail
+ */
+function validateModelFamilies(families, fail) {
+  if (!isRecord(families)) fail('modelFamilies должен быть объектом');
+  for (const [name, list] of Object.entries(families)) {
+    if (!name.trim()) fail('modelFamilies: пустое имя семейства');
+    if (!Array.isArray(list) || !list.length) fail(`modelFamilies.${name}: непустой массив моделей`);
+    for (const item of list) {
+      if (typeof item !== 'string' || !item.trim()) fail(`modelFamilies.${name}: непустая строка`);
+    }
+  }
+}
+
+/**
+ * Validate the house of the run: the models that the house trusts with the roles.
+ * @param {unknown} house
+ * @param {(message: string) => never} fail
+ * @param {object} families the families of the config
+ */
+function validateHouse(house, fail, families) {
+  const where = 'house';
+  if (!isRecord(house)) fail(`${where} должен быть объектом`);
+  for (const key of Object.keys(house)) {
+    if (!['models', 'safe', 'untrusted'].includes(key)) {
+      fail(`${where}.${key}: неизвестное поле (допустимо: models | safe | untrusted)`);
+    }
+  }
+  const models = house.models;
+  if (!isRecord(models)) fail(`${where}.models должен быть объектом`);
+  for (const [role, model] of Object.entries(models)) {
+    if (!role.trim()) fail(`${where}.models: пустое имя роли`);
+    if (model === null) continue;
+    if (typeof model !== 'string' || !model.trim()) fail(`${where}.models.${role}: непустая строка или null`);
+    checkFamilyRef(model, `${where}.models.${role}`, fail, families);
+  }
+  const safe = house.safe;
+  if (!isRecord(safe)) fail(`${where}.safe должен быть объектом`);
+  for (const key of Object.keys(safe)) {
+    if (!['model', 'effort'].includes(key)) fail(`${where}.safe.${key}: неизвестное поле`);
+  }
+  if (typeof safe.model !== 'string' || !safe.model.trim()) fail(`${where}.safe.model: непустая строка`);
+  checkFamilyRef(safe.model, `${where}.safe.model`, fail, families);
+  if (!ENUMS.reasoningEfforts.includes(safe.effort)) {
+    fail(`${where}.safe.effort: ${ENUMS.reasoningEfforts.join(' | ')}`);
+  }
+  const untrusted = house.untrusted;
+  if (!isRecord(untrusted)) fail(`${where}.untrusted должен быть объектом`);
+  for (const [model, roles] of Object.entries(untrusted)) {
+    if (!model.trim()) fail(`${where}.untrusted: пустое имя модели`);
+    checkFamilyRef(model, `${where}.untrusted.${model}`, fail, families);
+    if (!Array.isArray(roles)) fail(`${where}.untrusted.${model}: массив ролей`);
+    for (const role of roles) {
+      if (typeof role !== 'string' || !role.trim()) fail(`${where}.untrusted.${model}: непустая строка роли`);
+    }
+  }
+}
 
 /**
  * Validate an optional header map: token names, single-line string values.
@@ -179,6 +254,7 @@ export function validateConfig(config) {
   const c = config;
 
   if (typeof c.model !== 'string' || !c.model.trim()) fail('укажите model (или AI_MEASURE_MODEL / --model).');
+  checkFamilyRef(c.model, 'model', fail, c.modelFamilies);
   if (typeof c.baseURL !== 'string' || !c.baseURL.trim()) fail('baseURL должен быть URL.');
   try { new URL(c.baseURL); } catch { fail('baseURL должен быть URL.'); }
   if (c.apiKey !== null && (typeof c.apiKey !== 'string' || /[\r\n]/.test(c.apiKey))) fail('apiKey: строка или null.');
@@ -193,6 +269,9 @@ export function validateConfig(config) {
     if (profile.maxOutput != null && !(Number.isSafeInteger(profile.maxOutput) && profile.maxOutput > 0)) fail(`models.${modelId}.maxOutput: целое > 0`);
     if (profile.ceiling != null && !ENUMS.reasoningEfforts.includes(profile.ceiling)) fail(`models.${modelId}.ceiling: ${ENUMS.reasoningEfforts.join(' | ')}`);
   }
+
+  validateModelFamilies(c.modelFamilies, fail);
+  validateHouse(c.house, fail, c.modelFamilies);
 
   if (!isRecord(c.reasoning)) fail('reasoning должен быть объектом');
   for (const key of Object.keys(c.reasoning)) if (!(key in defaults.reasoning)) fail(`reasoning.${key}: неизвестное поле`);
@@ -276,6 +355,7 @@ export function validateConfig(config) {
       if (!ROLE_FIELDS.includes(key)) fail(`roles.${name}.${key}: неизвестное поле`);
     }
     if (role.model != null && (typeof role.model !== 'string' || !role.model.trim())) fail(`roles.${name}.model: строка или null`);
+    checkFamilyRef(role.model, `roles.${name}.model`, fail, c.modelFamilies);
     if (role.effort != null && !ENUMS.reasoningEfforts.includes(role.effort)) fail(`roles.${name}.effort: ${ENUMS.reasoningEfforts.join(' | ')}`);
     if (role.maxEffort != null && !ENUMS.reasoningEfforts.includes(role.maxEffort)) fail(`roles.${name}.maxEffort: ${ENUMS.reasoningEfforts.join(' | ')}`);
     if (role.tools != null && !Array.isArray(role.tools)) fail(`roles.${name}.tools: массив имён или null`);

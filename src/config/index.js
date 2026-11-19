@@ -16,6 +16,7 @@ import { defaults, cloneDefaults, defaultConfigText } from './defaults.js';
 import { readConfigFile, writeConfigFile, expandPlaceholders, mergeSources } from './parser.js';
 import { defaultHome, homeConfigFile, homeSkillsDir, resolveConfigPath, ensureHomeDir } from './paths.js';
 import { validateConfig } from './validate.js';
+import { resolveModelRef } from '../model/families.js';
 
 export { ENUMS, defaults, cloneDefaults, defaultConfigText, validateConfig, defaultHome, homeConfigFile, homeSkillsDir, resolveConfigPath, ensureHomeDir };
 
@@ -68,6 +69,9 @@ export async function loadConfig({ configPath = null, overrides = {}, env = proc
   config.configFiles = [homeConfigFile(home), ...(explicitPath ? [explicitPath] : [])];
 
   validateConfig(config);
+  // The model of the run may name a family of models: the cheapest member of the family
+  // that takes the effort of the run answers.
+  config.model = resolveModelRef(config.model, config, { effort: config.reasoning?.effort ?? null }) ?? config.model;
   if (ensureHome) await ensureHomeDir(home);
   return config;
 }

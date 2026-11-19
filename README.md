@@ -338,6 +338,45 @@ answers on the run's selected model. A role that names its own model in the conf
 The `measure` stage itself has no verdict yet: what is better there — the Gemini or the Kimi —
 is not decided, so the stage keeps the model of the run until there is an answer.
 
+The trust of the house is a part of the configuration, so the safe model, its effort and the
+table of the untrusted models may be changed:
+
+```json
+{
+  "house": {
+    "models": { "measurer": "openai/gpt-6.1-terra" },
+    "safe": { "model": "moonshotai/kimi-k3.1-pro", "effort": "high" },
+    "untrusted": { "google/gemini-4-hydrogen": ["segmentator", "cropper", "recognizer"] }
+  }
+}
+```
+
+`house.models` is the model of the house for the roles that have one: a role that is named
+there answers on that model whatever the model of the run is. `house.safe` is the model the
+house trusts with the roles that the model of the run is not trusted with. `house.untrusted` is
+the table of the trust itself — the key is the model (or a family of models, `family:gemini`)
+and the value is the list of the roles that move to the safe model.
+
+### The families of models
+
+A family is a named list of interchangeable models, from the cheapest to the most expensive:
+
+```json
+{
+  "modelFamilies": {
+    "gpt": ["openai/gpt-6.1-terra", "openai/gpt-6.2-sol"],
+    "gemini": ["google/gemini-4-hydrogen", "google/gemini-4-neon"],
+    "claude": ["anthropic/claude-haiku-5.5", "anthropic/claude-sonnet-5.5"]
+  }
+}
+```
+
+A family is named where a model is expected with the prefix `family:` — in the model of the run
+(`--model family:gpt`), in the pin of a role (`roles.segmentator.model`) or in the model of the
+house (`house.models.measurer`). The run answers with the cheapest member of the family that
+takes the effort the role asks for, and the rest of the list is the ladder of the budget: when
+the model of the family refuses, the next member answers in its place.
+
 ## Outputs
 
 The artifacts land in `output.dir` (default `./measurements`):
