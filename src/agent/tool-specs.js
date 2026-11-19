@@ -150,6 +150,21 @@ export const TOOL_SPECS = Object.freeze({
         required: ['path'],
         roles: ['measurer', 'recognizer', 'sampler', 'resolver', 'designer'],
     },
+    read_skill: {
+        configKey: 'skill',
+        description: 'Read an installed Agent Skill by name. Use it before applying a design workflow, '
+            + 'polish pass or visual review described by the skill.',
+        parameters: {
+            type: 'object',
+            properties: {
+                name: str('The name of the skill, for example `oil-ui`.'),
+            },
+            required: ['name'],
+            additionalProperties: false,
+        },
+        required: ['name'],
+        roles: ['designer'],
+    },
     write_file: {
         configKey: 'write',
         description: 'Write a text file into the working directory.',

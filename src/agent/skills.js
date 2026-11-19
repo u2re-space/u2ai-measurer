@@ -25,7 +25,8 @@
  *
  * @depends node:fs/promises, node:path
  * @usedBy roles/index, shared/pipeline
- * @exports defaultSkillsDir, loadSkills, skillsForRole, listSkillPacks, parseFrontmatter
+ * @exports defaultSkillsDir, loadSkills, skillsForRole, listSkillPacks, parseFrontmatter,
+ *          skillDirectories, discoverSkills, buildSkillInstructions, readSkill
  * @ai.tags skills, prompts
  * @ai.hint io
  * @ai.hint legacy-0.2
@@ -48,6 +49,28 @@ export function defaultSkillsDir(env = process.env) {
 }
 
 /**
+ * The standard Agent Skills directories, in precedence order.
+ *
+ * The project directories come first, then the global user directory installed by
+ * `npx skills add <package> -g`.
+ * @param {string} root the project directory
+ * @param {object} [env]
+ * @returns {string[]}
+ * @exports
+ * @ai.hint pure
+ */
+export function skillDirectories(root, env = process.env) {
+    const home = env.HOME || env.USERPROFILE || '';
+    return [
+        path.join(root, '.agents', 'skills'),
+        path.join(root, '.koda', 'skills'),
+        path.join(root, '.claude', 'skills'),
+        path.join(root, '.rules', 'skills'),
+        path.join(home, '.agents', 'skills'),
+    ];
+}
+
+/**
  * Split the frontmatter of a markdown file from its body.
  *
  * The frontmatter is a YAML-ish block of `key: value` lines. The parser is deliberately small:
@@ -62,12 +85,22 @@ export function parseFrontmatter(text) {
     const match = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/.exec(source);
     if (!match) return { meta: {}, body: source };
     const meta = {};
-    for (const line of match[1].split(/\r?\n/)) {
-        const colon = line.indexOf(':');
+    const lines = match[1].split(/\r?\n/);
+    for (let index = 0; index < lines.length; index += 1) {
+        const colon = lines[index].indexOf(':');
         if (colon < 0) continue;
-        const key = line.slice(0, colon).trim();
+        const key = lines[index].slice(0, colon).trim();
         if (!key) continue;
-        const value = line.slice(colon + 1).trim().replace(/^["']|["']$/g, '');
+        let value = lines[index].slice(colon + 1).trim().replace(/^["']|["']$/g, '');
+        if (value === '>' || value === '|' || value === '>-' || value === '|-') {
+            const fold = value[0] === '>';
+            const parts = [];
+            while (index + 1 < lines.length && (/^[ \t]/.test(lines[index + 1]) || lines[index + 1] === '')) {
+                parts.push(lines[++index].replace(/^[ \t]+/, ''));
+            }
+            while (parts.length && parts[parts.length - 1] === '') parts.pop();
+            value = fold ? parts.join(' ').replace(/\s+/g, ' ').trim() : parts.join('\n');
+        }
         meta[key] = value;
     }
     return { meta, body: source.slice(match[0].length) };
@@ -148,6 +181,103 @@ async function readPackDir(dir, name) {
         bytes: Buffer.byteLength(content, 'utf-8'),
         files: used,
     };
+}
+
+/**
+ * Read the Agent Skills of one directory.
+ * @param {string} dir
+ * @returns {Promise<Array<{name: string, description: string, body: string, path: string, metadata: object}>>}
+ * @exports
+ * @ai.hint io
+ */
+async function discoverInDir(dir) {
+    const skills = [];
+    const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
+    for (const entry of entries) {
+        if (!entry.isDirectory()) continue;
+        const file = path.join(dir, entry.name, 'SKILL.md');
+        const raw = await readFile(file, 'utf-8').catch(() => null);
+        if (raw === null) continue;
+        const { meta, body } = parseFrontmatter(raw);
+        if (!body.trim()) continue;
+        skills.push({
+            name: meta.name || entry.name,
+            description: meta.description || '',
+            body: body.trim(),
+            path: file,
+            metadata: meta,
+        });
+    }
+    return skills;
+}
+
+/**
+ * Discover the installed Agent Skills without repeats.
+ * @param {string} root the project directory
+ * @param {{ extraDirs?: string[], env?: object }} [options]
+ * @returns {Promise<Array<{name: string, description: string, body: string, path: string, metadata: object}>>}
+ * @exports
+ * @ai.hint io
+ */
+export async function discoverSkills(root, { extraDirs = [], env = process.env } = {}) {
+    const dirs = [...skillDirectories(root, env), ...extraDirs];
+    const found = [];
+    const seen = new Set();
+    for (const dir of dirs) {
+        for (const skill of await discoverInDir(dir)) {
+            if (seen.has(skill.name)) continue;
+            seen.add(skill.name);
+            found.push(skill);
+        }
+    }
+    return found;
+}
+
+/**
+ * Build the list of installed skills for the instructions of a role.
+ * @param {Array<{name: string, description: string}>} skills
+ * @returns {string}
+ * @exports
+ * @ai.hint pure
+ */
+export function buildSkillInstructions(skills = []) {
+    const list = Array.isArray(skills) ? skills : [];
+    if (!list.length) return '';
+    return [
+        '# Available skills',
+        '',
+        'These skills are installed. Read the relevant one with the `read_skill` tool before you use it.',
+        '',
+        ...list.map((skill) => `- **\`${skill.name}\`**: ${skill.description || 'no description'}`),
+    ].join('\n');
+}
+
+/**
+ * Read one installed Agent Skill by name.
+ * @param {string} name
+ * @param {string} root the project directory
+ * @param {{ extraDirs?: string[], env?: object }} [options]
+ * @returns {Promise<{name: string, description: string, body: string, path: string, metadata: object}|null>}
+ * @exports
+ * @ai.hint io
+ */
+export async function readSkill(name, root, { extraDirs = [], env = process.env } = {}) {
+    const wanted = String(name ?? '').trim();
+    if (!wanted || !/^[\w.-]+$/.test(wanted)) return null;
+    for (const dir of [...skillDirectories(root, env), ...extraDirs]) {
+        const file = path.join(dir, wanted, 'SKILL.md');
+        const raw = await readFile(file, 'utf-8').catch(() => null);
+        if (raw === null) continue;
+        const { meta, body } = parseFrontmatter(raw);
+        return {
+            name: meta.name || wanted,
+            description: meta.description || '',
+            body: body.trim(),
+            path: file,
+            metadata: meta,
+        };
+    }
+    return null;
 }
 
 /**

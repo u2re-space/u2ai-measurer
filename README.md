@@ -647,7 +647,7 @@ The knobs a user edits most often:
 | `roles.<name>.effort` | The effort of one role. It wins over the effort of the stage. |
 | `roles.<name>.maxEffort` | The ceiling of one role. |
 | `documentation.roles` | The standards a role is given: `cssUnits`, `cssColors`, `cssDisplay`, `cssShapes`, `cssTransform`, `cssMotion`, `cssContain`, `cssImages`, `cssMasking`, `cssFonts`, `cssGrid`, `cssFlex`, `wcagColors`, `phosphorIcons`, `lucideIcons`, `googleFonts`. |
-| `tools` | The switches of the tools: `read`, `write`, `list`, `search`, `image_view`, `image_crop`, `image_split`, `image_sample`, `color_parse`, `external_image`, `external_decompose`. |
+| `tools` | The switches of the tools: `read`, `write`, `list`, `search`, `skill`, `image_view`, `image_crop`, `image_split`, `image_sample`, `color_parse`, `external_image`, `external_decompose`. |
 | `mcp.servers` | The MCP tool servers: `{ name, url }` or `{ name, command, args }`. |
 | `skills.dir` | Where the skill packs are; the default is `~/.ai-measure/skills`. |
 | `fallback.models` | The chain of models to try when one fails; `*` is the chain of every other model. |
@@ -690,6 +690,21 @@ Measure the spacing on a 4px grid.
 The text is appended to the instructions of the role, so it is part of the system prompt and
 not something the model can be talked out of. The packs are read, never written. The fragment
 pass inherits the packs of the measurer.
+
+Standard Agent Skills are discovered separately in `.agents/skills`, `.koda/skills`,
+`.claude/skills`, `.rules/skills` and `~/.agents/skills`. The designer sees their catalogue
+and reads the relevant one on demand with the `read_skill` tool. This makes globally installed
+design workflows available to both `ai-measure` and `u2ai-measurer`:
+
+```sh
+npx skills add heydamir/unslop -g
+npx skills add felipebasurto/unslop-ui -g
+npx skills add oil-oil/oil-ui -g
+npx skills add GoogleChrome/modern-web-guidance -g
+npx modern-web-guidance@latest install
+```
+
+Run `ai-measure skills` to see both the role packs and the installed Agent Skills.
 
 ### The API key
 

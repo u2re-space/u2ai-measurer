@@ -9,7 +9,15 @@ import path from 'node:path';
 import { mkdtemp, mkdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 
-import { listSkillPacks, loadSkills, parseFrontmatter, skillsForRole } from '../src/agent/skills.js';
+import {
+    buildSkillInstructions,
+    discoverSkills,
+    listSkillPacks,
+    loadSkills,
+    parseFrontmatter,
+    readSkill,
+    skillsForRole,
+} from '../src/agent/skills.js';
 
 const dir = async () => await mkdtemp(path.join(tmpdir(), 'ai-measure-skills-'));
 
@@ -24,6 +32,11 @@ test('a file without a frontmatter is all body', () => {
     const { meta, body } = parseFrontmatter('Just text.');
     assert.deepEqual(meta, {});
     assert.equal(body, 'Just text.');
+});
+
+test('a block scalar keeps the full description', () => {
+    const { meta } = parseFrontmatter('---\nname: Pack\ndescription: >\n  The first line.\n  The second line.\n---\nThe text.');
+    assert.equal(meta.description, 'The first line. The second line.');
 });
 
 test('a pack of the measurer reaches the measurer and not the designer', async () => {
@@ -85,4 +98,43 @@ test('the packs of a directory are listed', async () => {
 
 test('a directory without packs is not an error', async () => {
     assert.deepEqual(await loadSkills({ dir: path.join(tmpdir(), 'ai-measure-nothing-here') }), []);
+});
+
+test('standard Agent Skills are discovered in the project and the global home', async () => {
+    const root = await dir();
+    const home = await dir();
+    await mkdir(path.join(root, '.agents', 'skills', 'project-skill'), { recursive: true });
+    await writeFile(
+        path.join(root, '.agents', 'skills', 'project-skill', 'SKILL.md'),
+        '---\nname: project-skill\ndescription: A project skill.\n---\nProject rules.',
+    );
+    await mkdir(path.join(home, '.agents', 'skills', 'global-skill'), { recursive: true });
+    await writeFile(
+        path.join(home, '.agents', 'skills', 'global-skill', 'SKILL.md'),
+        '---\nname: global-skill\ndescription: A global skill.\n---\nGlobal rules.',
+    );
+
+    const skills = await discoverSkills(root, { env: { HOME: home } });
+    const names = skills.map((skill) => skill.name);
+    assert.ok(names.includes('project-skill'));
+    assert.ok(names.includes('global-skill'));
+
+    const catalogue = buildSkillInstructions(skills);
+    assert.match(catalogue, /global-skill/);
+    assert.match(catalogue, /read_skill/);
+});
+
+test('a global Agent Skill is read by name', async () => {
+    const root = await dir();
+    const home = await dir();
+    await mkdir(path.join(home, '.agents', 'skills', 'oil-ui'), { recursive: true });
+    await writeFile(
+        path.join(home, '.agents', 'skills', 'oil-ui', 'SKILL.md'),
+        '---\nname: oil-ui\ndescription: UI design workflow.\n---\nChoose a visual direction.',
+    );
+
+    const skill = await readSkill('oil-ui', root, { env: { HOME: home } });
+    assert.equal(skill.name, 'oil-ui');
+    assert.match(skill.body, /visual direction/);
+    assert.equal(await readSkill('../outside', root, { env: { HOME: home } }), null);
 });

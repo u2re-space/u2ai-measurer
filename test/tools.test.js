@@ -40,7 +40,7 @@ async function workspace() {
 }
 
 test('the catalogue holds every tool of the measurer', () => {
-    for (const name of ['view_image', 'crop_image', 'split_image', 'sample_colors', 'list_files', 'read_file', 'write_file', 'search_files', 'call_ai_image', 'call_ai_decompose']) {
+    for (const name of ['view_image', 'crop_image', 'split_image', 'sample_colors', 'list_files', 'read_file', 'read_skill', 'write_file', 'search_files', 'call_ai_image', 'call_ai_decompose']) {
         assert.ok(TOOL_NAMES.includes(name), `${name} is missing`);
         assert.ok(TOOL_SPECS[name].description.length > 10);
         assert.equal(toolSpecKey(name), TOOL_SPECS[name].configKey);
@@ -73,6 +73,7 @@ test('the tools are cut down by the role', () => {
     const designer = enabledToolNames({}, { role: 'designer' });
     assert.ok(!measurer.includes('write_file'));
     assert.ok(designer.includes('write_file'));
+    assert.ok(designer.includes('read_skill'));
     assert.ok(designer.includes('call_ai_image'));
 });
 
@@ -125,6 +126,26 @@ test('the read_file tool reads a text file', async () => {
         assert.match(answer, /quick brown fox/);
     } finally {
         await cleanup();
+    }
+});
+
+test('the read_skill tool reads a global Agent Skill', async () => {
+    const { root, cleanup } = await workspace();
+    const home = await mkdtemp(path.join(os.tmpdir(), 'ai-measure-home-'));
+    try {
+        const skillDir = path.join(home, '.agents', 'skills', 'oil-ui');
+        await mkdir(skillDir, { recursive: true });
+        await writeFile(
+            path.join(skillDir, 'SKILL.md'),
+            '---\nname: oil-ui\ndescription: UI design workflow.\n---\nChoose one clear visual direction.',
+            'utf-8',
+        );
+        const toolset = createToolset({ root, config: { tools: {} }, env: { HOME: home } });
+        const answer = await toolset.execute('read_skill', { name: 'oil-ui' });
+        assert.match(answer, /visual direction/);
+    } finally {
+        await cleanup();
+        await rm(home, { recursive: true, force: true });
     }
 });
 

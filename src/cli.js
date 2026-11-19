@@ -25,7 +25,7 @@ import { sampleColors } from './image/colors.js';
 import { rasterCrop, rasterInfo, rasterSplit } from './image/sharp.js';
 import { clampRect } from './image/crop.js';
 import { documentationFor, documentationNames } from './agent/documentation.js';
-import { listSkillPacks } from './agent/skills.js';
+import { discoverSkills, listSkillPacks } from './agent/skills.js';
 import { buildPalette, buildTokens } from './stages/resolve.js';
 
 const require = createRequire(import.meta.url);
@@ -312,20 +312,32 @@ function commandConfig(config) {
 }
 
 /**
- * The `skills` command: the skill packs of the home directory.
+ * The `skills` command: the role packs of the home directory and the installed Agent Skills.
  * @param {object} config
  * @returns {Promise<number>}
  * @ai.hint io
  */
 async function commandSkills(config) {
     const packs = await listSkillPacks({ dir: config?.skills?.dir ?? null });
-    if (!packs.length) {
+    const skills = await discoverSkills(process.cwd(), {
+        extraDirs: config?.skills?.dir ? [config.skills.dir] : [],
+    });
+    if (!packs.length && !skills.length) {
         console.log('No skill packs found. Put markdown files into ~/.ai-measure/skills.');
         return EXIT.ok;
     }
-    for (const pack of packs) {
-        const files = pack.files?.length ? ` (${pack.files.join(', ')})` : '';
-        console.log(`  ${pack.name} — ${pack.bytes} bytes${files}`);
+    if (packs.length) {
+        console.log('Role skill packs:');
+        for (const pack of packs) {
+            const files = pack.files?.length ? ` (${pack.files.join(', ')})` : '';
+            console.log(`  ${pack.name} — ${pack.bytes} bytes${files}`);
+        }
+    }
+    if (skills.length) {
+        console.log('Agent Skills:');
+        for (const skill of skills) {
+            console.log(`  ${skill.name} — ${skill.description || 'no description'}`);
+        }
     }
     return EXIT.ok;
 }

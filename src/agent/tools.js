@@ -25,6 +25,7 @@ import { sampleColors, contrastRatio } from '../image/colors.js';
 import { describeColor as describeCssColor } from '../image/color-space.js';
 import { clampRect } from '../image/crop.js';
 import { toolSpecs as buildSpecs } from './tool-specs.js';
+import { readSkill } from './skills.js';
 import { isInside, resolveInside, toPosix } from './paths.js';
 import { mapFiles } from './run-map.js';
 import { writeFileAtomic } from '../shared/house.js';
@@ -560,6 +561,14 @@ export function createToolset({ root, config, role = null, mcp = [], writeDirs =
                 const known = await readFromMap(rel);
                 if (known !== null) return known;
                 return await readFile(located.abs, 'utf-8');
+            }
+            case 'read_skill': {
+                const name = String(args.name ?? '').trim();
+                const extraDirs = config?.skills?.dir ? [String(config.skills.dir)] : [];
+                const skill = await readSkill(name, root, { extraDirs, env });
+                if (!skill) return `Skill not found: ${name}`;
+                const head = skill.description ? `${skill.description}\n\n` : '';
+                return `# ${skill.name}\n\n${head}${skill.body}`;
             }
             case 'write_file': {
                 const target = await writePath(args.path);

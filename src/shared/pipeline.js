@@ -21,7 +21,7 @@ import { mkdir, stat, cp } from 'node:fs/promises';
 import { randomBytes } from 'node:crypto';
 import { createRoleRunner, resolveRole } from '../roles/index.js';
 import { createToolset } from '../agent/tools.js';
-import { loadSkills } from '../agent/skills.js';
+import { buildSkillInstructions, discoverSkills, loadSkills } from '../agent/skills.js';
 import { connectMcpServers } from '../agent/mcp.js';
 import { openContext } from '../agent/context.js';
 import { openRunMap } from '../agent/run-map.js';
@@ -166,6 +166,15 @@ export async function runPipeline({
     // The other roles get their own packs; a role without a pack simply has none.
     for (const name of ['segmentator', 'cropper', 'recognizer', 'sampler', 'resolver', 'designer']) {
         skills[name] = packText(await loadSkills({ dir: skillDir, role: name }));
+    }
+    // Standard Agent Skills are read on demand. The designer sees their catalogue and can
+    // open the ones that fit the current task with `read_skill`.
+    const availableSkills = await discoverSkills(root, {
+        extraDirs: skillDir ? [skillDir] : [],
+    });
+    const skillCatalogue = buildSkillInstructions(availableSkills);
+    if (skillCatalogue) {
+        skills.designer = [skills.designer, skillCatalogue].filter(Boolean).join('\n\n');
     }
 
     const mcp = dryRun ? [] : await connectMcpServers(config?.mcp?.servers ?? []);

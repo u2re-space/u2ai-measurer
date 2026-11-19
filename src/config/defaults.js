@@ -161,6 +161,7 @@ export const defaults = {
     write: true,
     list: true,
     search: true,
+    skill: true,
     image_view: true,
     image_crop: true,
     image_split: true,

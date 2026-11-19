@@ -33,6 +33,12 @@ rules), assets (generated images with resolution and purpose, external resources
 template (path to an HTML skeleton you wrote, or empty), designMd (whether DESIGN.md was read
 and what tokens were extracted), notes (ambiguities and assumptions).
 
+## Design skills
+
+The available-skills catalogue in your instructions lists the installed UI design workflows.
+When one of them fits the task, read it with \`read_skill\` before choosing the visual direction.
+Apply the skill to the design you produce; do not merely mention that it exists.
+
 ## Design sources
 
 Read attached reference images with view_image. If the project root contains DESIGN.md,

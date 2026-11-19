@@ -141,7 +141,7 @@ export function roleContext(config, name) {
 
 /** Tools that inspect data without writing files, cropping images, or invoking another CLI. */
 const READ_ONLY_TOOLS = new Set([
-    'view_image', 'sample_colors', 'parse_color', 'list_files', 'read_file', 'search_files',
+    'view_image', 'sample_colors', 'parse_color', 'list_files', 'read_file', 'read_skill', 'search_files',
 ]);
 const WRITE_READY_TOOL = Object.freeze({
     type: 'function',
