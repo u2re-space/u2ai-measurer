@@ -36,8 +36,9 @@ test('the defaults load when there is no config file', async () => {
     const { env, cleanup } = await tempHome();
     try {
         const config = await loadConfig({ env, cwd: process.cwd(), ensureHome: false });
-        //assert.equal(config.model, 'openai/gpt-6-luna');
-        assert.equal(config.model, 'openai/gpt-6.2-sol');
+        // The model of the run is a family: the cheapest member that takes the effort of the
+        // run answers.
+        assert.equal(config.model, 'openai/gpt-6.1-terra');
         assert.equal(config.agent.design, 'off');
         assert.equal(config.stages.measure.enabled, true);
         assert.equal(config.output.dir, './measurements');

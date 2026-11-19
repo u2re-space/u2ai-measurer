@@ -33,7 +33,7 @@ import { instructions as designerInstructions } from './designer.js';
 import { parseResponse, textPart, imagePart } from '../openai/responses.js';
 import { withModelFallback } from '../openai/fallback.js';
 import { getModelProfile, maxOutputFor, snapEffort, capEffort } from '../model/profiles.js';
-import { resolveModelRef } from '../model/families.js';
+import { rankPath, resolveModelRef } from '../model/refs.js';
 import { houseModel, safeEffort, safeModel, isTrusted } from '../model/trust.js';
 import { documentationFor } from '../agent/documentation.js';
 import { schemaProblems } from '../agent/schemas.js';
@@ -211,11 +211,17 @@ export function resolveRole(config, name, { model = null, effort = null, ceiling
     // the configuration.
     const runModel = model ? String(model) : null;
     const roleModel = role?.model ? String(role.model) : null;
-    const wantedModel = resolveModelRef(runModel, config, { effort: wantedEffort })
-        ?? resolveModelRef(roleModel, config, { effort: wantedEffort })
-        ?? houseModel(name, config, { effort: wantedEffort })
-        ?? resolveModelRef(fallback?.model ? String(fallback.model) : null, config, { effort: wantedEffort })
-        ?? resolveModelRef(textOf(config?.model) || null, config, { effort: wantedEffort });
+    const context = pick('context');
+    const budget = typeof context === 'string' || Number.isSafeInteger(context) ? context : null;
+    // The path of the ranks of the role in its family: the role answers on the first place
+    // of it.
+    const path = rankPath(config?.house?.ranks?.roles?.[name]);
+    const rank = path?.[0] ?? null;
+    const wantedModel = resolveModelRef(runModel, config, { effort: wantedEffort, context: budget, rank })
+        ?? resolveModelRef(roleModel, config, { effort: wantedEffort, context: budget, rank })
+        ?? houseModel(name, config, { effort: wantedEffort, context: budget, rank })
+        ?? resolveModelRef(fallback?.model ? String(fallback.model) : null, config, { effort: wantedEffort, context: budget, rank })
+        ?? resolveModelRef(textOf(config?.model) || null, config, { effort: wantedEffort, context: budget, rank });
     // The trust rule: a model that is not trusted with the role does not answer it — the role
     // goes to the safe model of the house. The pin of the role itself is never moved: the user
     // named that model for that role on purpose.

@@ -13,7 +13,7 @@ export * from './src/image/crop.js';
 export * from './src/image/sharp.js';
 export * from './src/openai/responses.js';
 export * from './src/model/profiles.js';
-export * from './src/model/families.js';
+export * from './src/model/refs.js';
 export * from './src/model/trust.js';
 export * from './src/roles/index.js';
 export * from './src/agent/tool-specs.js';

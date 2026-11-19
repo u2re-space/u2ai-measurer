@@ -377,6 +377,36 @@ house (`house.models.measurer`). The run answers with the cheapest member of the
 takes the effort the role asks for, and the rest of the list is the ladder of the budget: when
 the model of the family refuses, the next member answers in its place.
 
+A group is a named list of models of one kind — the members are peers, and the one that fits
+the work answers. A member may name the limit of the context it is trusted with
+(`maxContext`, in tokens): the member is not asked when the context of the role is bigger than
+the limit. A group is named with the prefix `group:`.
+
+```json
+{
+  "modelGroups": {
+    "small": [
+      { "model": "openai/gpt-6-luna" },
+      { "model": "anthropic/claude-haiku-5.5", "maxContext": 100000 }
+    ]
+  }
+}
+```
+
+The house of the measurer names no group of its own: the work of the measurer is a measurement,
+and a measurement wants the eye, not the price.
+
+The list of a family is also a ranking: a path of the ranks says where in its family a role
+answers — the first place of the path, and the next one when its work is done:
+
+```json
+{
+  "house": {
+    "ranks": { "roles": { "recognizer": [1, 0] } }
+  }
+}
+```
+
 ## Outputs
 
 The artifacts land in `output.dir` (default `./measurements`):
@@ -562,7 +592,7 @@ The starter file:
 
 ```json
 {
-  "model": "openai/gpt-6-luna",
+  "model": "family:gpt",
   "reasoning": { "effort": "high", "summary": "auto" },
   "backends": [
     { "baseURL": "https://routerai.ru/api/v1", "env": "ROUTERAI_API_KEY" }

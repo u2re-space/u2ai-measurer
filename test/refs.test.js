@@ -1,14 +1,16 @@
 /**
- * @file test/families.test.js
- * @module test/families
- * @purpose Tests of the families of models: the cheapest member of the family answers, and
- *          the rest of the list is the ladder of the budget.
- * @depends node:test, model/families, roles/index, openai/fallback
+ * @file test/refs.test.js
+ * @module test/refs
+ * @purpose Tests of the references to models: the families (the cheapest member answers) and
+ *          the groups (the member that fits the work answers).
+ * @depends node:test, model/refs, roles/index, openai/fallback
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { familyLadder, familyModels, familyName, resolveModelRef } from '../src/model/families.js';
+import {
+    familyLadder, familyModels, familyName, groupLadder, groupMembers, groupName, resolveModelRef,
+} from '../src/model/refs.js';
 import { fallbackChain } from '../src/openai/fallback.js';
 import { resolveRole } from '../src/roles/index.js';
 import { defaults } from '../src/config/defaults.js';
@@ -83,4 +85,33 @@ test('a family of models may be untrusted with a role', () => {
     config.house.untrusted = { 'family:gemini': ['cropper'] };
     const cropper = resolveRole(config, 'cropper', { effort: 'high' });
     assert.equal(cropper.model, 'moonshotai/kimi-k3.1-pro');
+});
+
+test('a group of models answers with the member that fits the work', () => {
+    const config = configFor({
+        modelGroups: {
+            small: [
+                { model: 'openai/gpt-6-luna' },
+                { model: 'anthropic/claude-haiku-5.5', maxContext: 100_000 },
+            ],
+        },
+    });
+    assert.equal(groupName('group:small'), 'small');
+    assert.equal(groupName('small'), null);
+    assert.deepEqual(groupMembers(config, 'small').map((item) => item.model), [
+        'openai/gpt-6-luna',
+        'anthropic/claude-haiku-5.5',
+    ]);
+    assert.equal(resolveModelRef('group:small', config, { effort: 'high' }), 'openai/gpt-6-luna');
+    assert.deepEqual(groupLadder(config, 'openai/gpt-6-luna'), ['anthropic/claude-haiku-5.5']);
+    assert.ok(fallbackChain(config, 'openai/gpt-6-luna').includes('anthropic/claude-haiku-5.5'));
+});
+
+test('a role may be pinned to a group of models', () => {
+    const config = configFor({
+        model: 'google/gemini-4-hydrogen',
+        modelGroups: { small: ['openai/gpt-6-luna'] },
+    });
+    config.roles.measurer.model = 'group:small';
+    assert.equal(resolveRole(config, 'measurer', { effort: 'high' }).model, 'openai/gpt-6-luna');
 });

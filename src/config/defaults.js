@@ -13,7 +13,7 @@ import { ENUMS } from './constants.js';
 export const defaults = {
   // --- API -----------------------------------------------------------------
   /** Text model for the role agents. */
-  model: 'openai/gpt-6.2-sol',
+  model: 'family:gpt',
   /** Endpoint of the text API; backends[] below can override it. */
   baseURL: 'https://routerai.ru/api/v1',
   apiKey: null,
@@ -47,6 +47,13 @@ export const defaults = {
     models: {},
     safe: { model: 'moonshotai/kimi-k3.1-pro', effort: 'high' },
     untrusted: { 'google/gemini-4-hydrogen': ['segmentator', 'cropper', 'recognizer'] },
+    /**
+     * The paths of the ranks of the models of the house in their families.
+     *
+     * A path is a list of the places of the family: the role answers on the first place and
+     * steps down to the next one when its work is done.
+     */
+    ranks: { roles: {}, stages: {} },
   },
   /**
    * The families of models: a named list of interchangeable models, from the cheapest to
@@ -62,6 +69,18 @@ export const defaults = {
     gemini: ['google/gemini-4-hydrogen', 'google/gemini-4-neon'],
     claude: ['anthropic/claude-haiku-5.5', 'anthropic/claude-sonnet-5.5'],
   },
+  /**
+   * The groups of models: a named list of models of one kind.
+   *
+   * The members of a group are peers: the one that fits the work answers. A member may name
+   * the limit of the context it is trusted with (`maxContext`, in tokens): the member is not
+   * asked when the context of the role is bigger than the limit.
+   *
+   * A group is named where a model is expected with the prefix `group:`. The house of the
+   * measurer names no group of its own: the work of the measurer is a measurement, and a
+   * measurement wants the eye, not the price.
+   */
+  modelGroups: {},
 
   reasoning: { effort: 'high', summary: 'auto', mode: null },
   retries: 3,
@@ -394,6 +413,7 @@ export function defaultConfigText() {
       untrusted: structuredClone(defaults.house.untrusted),
     },
     modelFamilies: structuredClone(defaults.modelFamilies),
+    modelGroups: structuredClone(defaults.modelGroups),
   };
   return `${JSON.stringify(starter, null, 2)}\n`;
 }

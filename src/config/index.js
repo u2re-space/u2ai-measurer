@@ -16,7 +16,7 @@ import { defaults, cloneDefaults, defaultConfigText } from './defaults.js';
 import { readConfigFile, writeConfigFile, expandPlaceholders, mergeSources } from './parser.js';
 import { defaultHome, homeConfigFile, homeSkillsDir, resolveConfigPath, ensureHomeDir } from './paths.js';
 import { validateConfig } from './validate.js';
-import { resolveModelRef } from '../model/families.js';
+import { resolveModelRef } from '../model/refs.js';
 
 export { ENUMS, defaults, cloneDefaults, defaultConfigText, validateConfig, defaultHome, homeConfigFile, homeSkillsDir, resolveConfigPath, ensureHomeDir };
 

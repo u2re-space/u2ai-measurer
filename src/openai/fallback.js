@@ -9,15 +9,15 @@
  * @ai.hint legacy-0.2
  */
 
-import { familyLadder } from '../model/families.js';
+import { familyLadder, groupLadder } from '../model/refs.js';
 
 const isRecord = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
 const textOf = (value) => (typeof value === 'string' ? value : '');
 
 /**
  * The models to try after the given one: the list under `fallback.models.<model>`, then the
- * ladder of the budget of the family of the model, then the list under `fallback.models.*`
- * (the catch-all chain).
+ * ladder of the budget of the family of the model and the peers of its group, then the list
+ * under `fallback.models.*` (the catch-all chain).
  * @param {object} config
  * @param {string|null} model
  * @returns {string[]}
@@ -31,7 +31,8 @@ export function fallbackModels(config, model) {
         : []);
     const own = isRecord(map) ? pick(map[model]) : [];
     const shared = isRecord(map) ? pick(map['*']) : [];
-    const ladder = familyLadder(config, model);
+    const ladder = [...familyLadder(config, model), ...groupLadder(config, model)]
+        .filter((item) => !own.includes(item));
     return [
         ...own,
         ...ladder.filter((item) => !own.includes(item)),
