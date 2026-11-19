@@ -48,12 +48,12 @@ export const defaults = {
     safe: { model: 'moonshotai/kimi-k3.1-pro', effort: 'high' },
     untrusted: { 'google/gemini-4-hydrogen': ['segmentator', 'cropper', 'recognizer'] },
     /**
-     * The paths of the ranks of the models of the house in their families.
+     * The path of the ranks of the models of the house in their families.
      *
      * A path is a list of the places of the family: the role answers on the first place and
      * steps down to the next one when its work is done.
      */
-    ranks: { roles: {}, stages: {} },
+    ranks: { roles: {} },
   },
   /**
    * The families of models: a named list of interchangeable models, from the cheapest to

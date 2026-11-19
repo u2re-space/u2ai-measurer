@@ -63,8 +63,7 @@ Options:
                          a stage asks for, never raises it.
       --task <text>     The task the design direction answers.
   -c, --config <file>   The config file to use.
-  -k, --colors <n>      How many colours the palette holds (default 5).
-  -x, --x <px>          The left edge of the crop.
+  -k, --colors <n>      How many colours the palette holds (default 5).  -x, --x <px>          The left edge of the crop.
   -y, --y <px>          The top edge of the crop.
   -w, --width <px>      The width of the crop.
       --height <px>     The height of the crop.
